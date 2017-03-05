@@ -34,6 +34,7 @@ class SimpleModel:
         self.data = dict()
         self.frame_len = 30
         self.predict_dist = 5
+        self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):
         con = sqlite3.connect('../data/stock.db')
@@ -45,6 +46,9 @@ class SimpleModel:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
             X, Y = self.make_x_y(data)
+            if len(X) == 0: continue
+            self.scaler[code[0]] = StandardScaler()
+            X = self.scaler[code[0]].fit_transform(X)
             print(idx, split, len(code_list))
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
@@ -120,7 +124,7 @@ class SimpleModel:
 
         print("training model %d_%d.h5" % (self.frame_len, self.predict_dist))
         model_name = "../model/reg_keras/%d_%d.h5" % (self.frame_len, self.predict_dist)
-        self.estimator = KerasRegressor(build_fn=baseline_model, nb_epoch=10, batch_size=64, verbose=0)
+        self.estimator = KerasRegressor(build_fn=baseline_model, nb_epoch=100, batch_size=64, verbose=1)
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
         # saving model
@@ -271,10 +275,10 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20151101, 20151231)
-    #sm.train_model_keras(X_train, Y_train)
-    X_test, Y_test, Data = sm.load_all_data(20160101, 20170228)
-    sm.evaluate_model(X_test, Y_test, Data)
+    X_train, Y_train, _ = sm.load_all_data(20151101, 20151231)
+    sm.train_model_keras(X_train, Y_train)
+    #X_test, Y_test, Data = sm.load_all_data(20160101, 20170228)
+    #sm.evaluate_model(X_test, Y_test, Data)
 
     #X_data, code_list = sm.load_current_data()
     #sm.make_buy_list(X_data, code_list)
