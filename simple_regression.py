@@ -12,6 +12,8 @@ from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 import os
+from tensorflow.python.ops import control_flow_ops 
+tf.python.control_flow_ops = control_flow_ops
 
 MODEL_TYPE = 'keras'
 def baseline_model():
@@ -42,7 +44,7 @@ class SimpleModel:
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
         idx = 0
         split = int(len(code_list) / 9)
-        for code in code_list:
+        for code in code_list[0:10]:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
             X, Y = self.make_x_y(data, code[0])
@@ -100,10 +102,10 @@ class SimpleModel:
         if len(data) <= 0 :
             return np.array([]), np.array([])
 
-        if not self.scaler.has_key(code):
+        if code not in self.scaler:
             self.scaler[code] = StandardScaler()
             data = self.scaler[code].fit_transform(data)
-        elif not self.scaler.has_key(code):
+        elif code not in self.scaler:
             return np.array([]), np.array([])
         else:
             data = self.scaler[code].transform(data)
@@ -128,7 +130,7 @@ class SimpleModel:
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
-        K.set_session(sess)
+        #K.set_session(sess)
 
         print("training model %d_%d.h5" % (self.frame_len, self.predict_dist))
         model_name = "../model/reg_keras/%d_%d.h5" % (self.frame_len, self.predict_dist)
@@ -160,8 +162,9 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            buy_price = orig_X[idx][2]
-            future_price = orig_x[idx][3]
+            print(orig_data[idx])
+            buy_price = int(orig_data[idx][2])
+            future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
             if pred[idx] > buy_price*1.2:
                 res += (future_price - buy_price*1.005)*(100000/buy_price+1)
