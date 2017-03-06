@@ -19,10 +19,10 @@ def baseline_model():
     model = Sequential()
     #model.add(Dense(128, input_dim=174, init='he_normal', activation='relu'))
     model.add(Dense(128, input_dim=690, init='he_normal', activation='relu'))
-    model.add(normalization.BatchNormalization(epsilon=0.001, mode=0, axis=-1, momentum=0.99, weights=None, beta_init='zero', gamma_init='one', gamma_regularizer=None, beta_regularizer=None))
+    #model.add(normalization.BatchNormalization(epsilon=0.001, mode=0, axis=-1, momentum=0.99, weights=None, beta_init='zero', gamma_init='one', gamma_regularizer=None, beta_regularizer=None))
 
     #model.add(Dropout(0.1))
-    model.add(Dense(128, init='he_normal'))
+    #model.add(Dense(128, init='he_normal'))
     model.add(Dense(1, init='he_normal'))
     # Compile model
     model.compile(loss='mean_squared_error', optimizer='adam')
@@ -45,22 +45,25 @@ class SimpleModel:
         for code in code_list:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
-            X, Y = self.make_x_y(data)
+            X, Y = self.make_x_y(data, code[0])
             if len(X) == 0: continue
-            self.scaler[code[0]] = StandardScaler()
-            X = self.scaler[code[0]].fit_transform(X)
+            code_array = [code[0]] * len(X)
             print(idx, split, len(code_list))
+            assert len(X) == len(data.loc[29:len(data)-6, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = data.values.tolist()
+                DATA_list[int(idx/split)] = [data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']]
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend(data.values.tolist())
+                DATA_list[int(idx/split)].extend([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']])
             print(idx, np.shape(X_data_list[int(idx/split)]), np.shape(Y_data_list[int(idx/split)]))
             idx += 1
         for i in range(10):
+            if type(X_data_list[i]) == type(1):
+                print("type is int, need to pass", X_data_list[i])
+                continue
             if i == 0:
                 X_data = X_data_list[i]
                 Y_data = Y_data_list[i]
@@ -79,7 +82,7 @@ class SimpleModel:
         data = data.reset_index()
         return data
 
-    def make_x_y(self, data):
+    def make_x_y(self, data, code):
         data_x = []
         data_y = []
         for col in data.columns:
@@ -91,18 +94,23 @@ class SimpleModel:
                 print(e)
         data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
         data = data.drop(['일자', '체결강도'], axis=1)
-        for i in range(self.frame_len, len(data)-self.predict_dist):
-            """
-            for c in data.columns:
-                try:
-                    test = float(data.loc[i,c])
-                except:
-                    print("can not convert %s" % data.loc[i,c])
-            """
-            #print("make data from %s to %s, %s" % (data['일자'][i-frame_len], data['일자'][i-1], data['일자'][i-frame_len-predict_dist]))
-            #print(np.array(data.iloc[i-frame_len:i, :]))
-            data_x.extend(np.array(data.iloc[i-self.frame_len:i, :]))
-            data_y.extend(data.loc[i+self.predict_dist, ['현재가']])
+
+        # normalization
+        data = np.array(data)
+        if len(data) <= 0 :
+            return np.array([]), np.array([])
+
+        if not self.scaler.has_key(code):
+            self.scaler[code] = StandardScaler()
+            data = self.scaler[code].fit_transform(data)
+        elif not self.scaler.has_key(code):
+            return np.array([]), np.array([])
+        else:
+            data = self.scaler[code].transform(data)
+
+        for i in range(self.frame_len, len(data)-self.predict_dist+1):
+            data_x.extend(np.array(data[i-self.frame_len:i, :]))
+            data_y.append(data[i+self.predict_dist-1][0])
         np_x = np.array(data_x).reshape(-1, 23*30)
         np_y = np.array(data_y)
         return np_x, np_y
@@ -152,11 +160,12 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            buy_price = float(X_test[idx][23*29])
+            buy_price = orig_X[idx][2]
+            future_price = orig_x[idx][3]
             date = int(orig_data[idx][0])
             if pred[idx] > buy_price*1.2:
-                res += (int(Y_test[idx]) - buy_price*1.005)*(100000/buy_price+1)
-                print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, int(Y_test[idx]), (int(Y_test[idx]) - buy_price*1.005)*(100000/buy_price)))
+                res += (future_price - buy_price*1.005)*(100000/buy_price+1)
+                print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
         print("result: %d" % res)
 
     def load_current_data(self):
@@ -277,8 +286,8 @@ if __name__ == '__main__':
     sm = SimpleModel()
     X_train, Y_train, _ = sm.load_all_data(20151101, 20151231)
     sm.train_model_keras(X_train, Y_train)
-    #X_test, Y_test, Data = sm.load_all_data(20160101, 20170228)
-    #sm.evaluate_model(X_test, Y_test, Data)
+    X_test, Y_test, Data = sm.load_all_data(20170101, 20170228)
+    sm.evaluate_model(X_test, Y_test, Data)
 
     #X_data, code_list = sm.load_current_data()
     #sm.make_buy_list(X_data, code_list)
