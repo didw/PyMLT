@@ -53,11 +53,11 @@ class SimpleModel:
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = [data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']]
+                DATA_list[int(idx/split)] = [data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'].values.tolist(), data.loc[35:len(data), '현재가'].values.tolist()]
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']])
+                DATA_list[int(idx/split)].extend([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'].values.tolist(), data.loc[35:len(data), '현재가'].values.tolist()])
             print(idx, np.shape(X_data_list[int(idx/split)]), np.shape(Y_data_list[int(idx/split)]))
             idx += 1
         for i in range(10):
@@ -160,8 +160,8 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            buy_price = orig_X[idx][2]
-            future_price = orig_x[idx][3]
+            buy_price = int(orig_data[idx][2])
+            future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
             if pred[idx] > buy_price*1.2:
                 res += (future_price - buy_price*1.005)*(100000/buy_price+1)
@@ -284,9 +284,9 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    X_train, Y_train, _ = sm.load_all_data(20151101, 20151231)
-    sm.train_model_keras(X_train, Y_train)
-    X_test, Y_test, Data = sm.load_all_data(20170101, 20170228)
+    #X_train, Y_train, _ = sm.load_all_data(20130101, 20151231)
+    #sm.train_model_keras(X_train, Y_train)
+    X_test, Y_test, Data = sm.load_all_data(20160101, 20170228)
     sm.evaluate_model(X_test, Y_test, Data)
 
     #X_data, code_list = sm.load_current_data()
