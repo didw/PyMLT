@@ -55,11 +55,12 @@ class SimpleModel:
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = [data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']]
+                DATA_list[int(idx/split)] = [data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[35:len(data), '현재가']])
+                DATA_list[int(idx/split)].extend([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']])
+            print(int(idx/split), np.shape(DATA_list[int(idx/split)]), np.shape(DATA_list[int(idx/split)][0]), np.shape(DATA_list[int(idx/split)][1]), np.shape(DATA_list[int(idx/split)][2]), np.shape(DATA_list[int(idx/split)][3]))
             print(idx, np.shape(X_data_list[int(idx/split)]), np.shape(Y_data_list[int(idx/split)]))
             idx += 1
         for i in range(10):
@@ -74,6 +75,7 @@ class SimpleModel:
                 X_data.extend(X_data_list[i])
                 Y_data.extend(Y_data_list[i])
                 DATA.extend(DATA_list[i])
+            print("DATA", np.shape(DATA), np.shape(DATA[0]))
         return np.array(X_data), np.array(Y_data), np.array(DATA)
 
     def load_data(self, code, begin_date, end_date):
