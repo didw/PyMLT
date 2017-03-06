@@ -44,7 +44,7 @@ class SimpleModel:
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
         idx = 0
         split = int(len(code_list) / 9)
-        for code in code_list[0:10]:
+        for code in code_list:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
             X, Y = self.make_x_y(data, code[0])
@@ -165,10 +165,11 @@ class SimpleModel:
         print("score: %f" % score)
         for idx in range(len(pred)):
             print(orig_data[idx])
+            print(X_test[idx][0], pred[idx])
             buy_price = int(orig_data[idx][2])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
-            if pred[idx] > buy_price*1.2:
+            if pred[idx] > X_test[idx][0]*1.2:
                 res += (future_price - buy_price*1.005)*(100000/buy_price+1)
                 print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
         print("result: %d" % res)
