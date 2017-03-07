@@ -252,13 +252,17 @@ class SimpleModel:
         # load data in DATA
         con = sqlite3.connect('../data/stock.db')
         X_test = []
+        idx_rm = []
         first = True
         for idx, code in enumerate(DATA):
+            print(len(X_test)/30)
+            print(len(DATA) - len(idx_rm))
+
             try:
                 df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
             except pd.io.sql.DatabaseError as e:
                 print(e)
-                del DATA[idx]
+                idx_rm.append(idx)
                 continue
             data = df.iloc[-30:,:]
             data = data.reset_index()
@@ -273,17 +277,17 @@ class SimpleModel:
             DATA[idx].append(int(data.loc[len(data)-1, '현재가']))
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
-                del DATA[idx]
+                idx_rm.append(idx)
                 continue
-            print(len(X_test)/30)
-            print(len(DATA))
             try:
                 data = self.scaler[code[0]].transform(np.array(data))
             except KeyError:
-                del DATA[idx]
+                idx_rm.append(idx)
                 continue
             X_test.extend(np.array(data))
             print(np.shape(X_test))
+        for i in idx_rm[-1:0:-1]:
+            del DATA[i]
         X_test = np.array(X_test).reshape(-1, 23*30) 
         return X_test, DATA
 
@@ -333,7 +337,7 @@ if __name__ == '__main__':
     #X_test, Y_test, Data = sm.load_all_data(20160101, 20160301)
     #sm.evaluate_model(X_test, Y_test, Data, "20130101_20151231")
 
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
     X_data, data = sm.load_data_in_account()
     sm.make_sell_list(X_data, data, "20140101_20170228")
