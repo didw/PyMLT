@@ -229,9 +229,10 @@ class SimpleModel:
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt") as f_buy:
             for idx in range(len(pred)):
-                buy_price = int(orig_data[idx])
-                print("[BUY?] code: %s, cur: %f(%d), predict: %f" % (code_list[idx], X_test[idx][23*29], buy_price, pred[idx]))
-                if pred[idx] > buy_price*1.3:
+                real_buy_price = int(orig_data[idx])
+                buy_price = float(X_test[idx][23*29])
+                print("[BUY?] code: %s, cur: %f(%d), predict: %f" % (code_list[idx], buy_price, real_buy_price, pred[idx]))
+                if pred[idx] > buy_price:
                     print("add to buy_list %d")
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / buy_price)
@@ -242,7 +243,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
