@@ -199,6 +199,7 @@ class SimpleModel:
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
+                code_list.remove(code)
                 continue
             DATA.append(int(data.loc[len(data)-1, '현재가']))
             try:
@@ -212,7 +213,7 @@ class SimpleModel:
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 300000
+        BUY_UNIT = 10000
         print("make buy_list")
         if MODEL_TYPE == 'random_forest':
             model_name = "../model/simple_reg_model/%d_%d.pkl" % (self.frame_len, self.predict_dist)
@@ -235,7 +236,7 @@ class SimpleModel:
                 if pred[idx] > buy_price:
                     print("add to buy_list %d")
                     buy_item[1] = code_list[idx]
-                    buy_item[3] = int(BUY_UNIT / real_buy_price)
+                    buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
                     for item in buy_item:
                         f_buy.write("%s;"%str(item))
                     f_buy.write('\n')
@@ -257,7 +258,7 @@ class SimpleModel:
                 df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
             except pd.io.sql.DatabaseError as e:
                 print(e)
-                DATA[idx].append(-1)
+                del DATA[idx]
                 continue
             data = df.iloc[-30:,:]
             data = data.reset_index()
@@ -272,6 +273,7 @@ class SimpleModel:
             DATA[idx].append(int(data.loc[len(data)-1, '현재가']))
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
+                del DATA[idx]
                 continue
             print(len(X_test)/30)
             print(len(DATA))
