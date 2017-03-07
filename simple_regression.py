@@ -235,7 +235,7 @@ class SimpleModel:
                 if pred[idx] > buy_price:
                     print("add to buy_list %d")
                     buy_item[1] = code_list[idx]
-                    buy_item[3] = int(BUY_UNIT / buy_price)
+                    buy_item[3] = int(BUY_UNIT / real_buy_price)
                     for item in buy_item:
                         f_buy.write("%s;"%str(item))
                     f_buy.write('\n')
@@ -273,6 +273,8 @@ class SimpleModel:
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
                 continue
+            print(len(X_test)/30)
+            print(len(DATA))
             try:
                 data = self.scaler[code[0]].transform(np.array(data))
             except KeyError:
