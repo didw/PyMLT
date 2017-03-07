@@ -273,7 +273,11 @@ class SimpleModel:
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
                 continue
-            data = self.scaler[code[0]].transform(np.array(data))
+            try:
+                data = self.scaler[code[0]].transform(np.array(data))
+            except KeyError:
+                del DATA[idx]
+                continue
             X_test.extend(np.array(data))
             print(np.shape(X_test))
         X_test = np.array(X_test).reshape(-1, 23*30) 
