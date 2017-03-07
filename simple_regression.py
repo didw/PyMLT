@@ -201,7 +201,11 @@ class SimpleModel:
             if len(data) < 30:
                 continue
             DATA.append(int(data.loc[len(data)-1, '현재가']))
-            data = self.scaler[code].transform(np.array(data))
+            try:
+                data = self.scaler[code].transform(np.array(data))
+            except KeyError:
+                code_list.remove(code)
+                continue
             X_test.extend(np.array(data))
             print(np.shape(X_test))
         X_test = np.array(X_test).reshape(-1, 23*30) 
@@ -320,7 +324,7 @@ if __name__ == '__main__':
     #X_test, Y_test, Data = sm.load_all_data(20160101, 20160301)
     #sm.evaluate_model(X_test, Y_test, Data, "20130101_20151231")
 
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
     X_data, data = sm.load_data_in_account()
     sm.make_sell_list(X_data, data, "20140101_20170228")
