@@ -131,7 +131,7 @@ class SimpleModel:
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
-        K.set_session(sess)
+        #K.set_session(sess)
 
     def train_model_keras(self, X_train, Y_train, date):
         print("training model %d_%d.h5" % (self.frame_len, self.predict_dist))
@@ -231,7 +231,10 @@ class SimpleModel:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
-                pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
+                try:
+                    pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
+                except KeyError:
+                    continue
                 print("[BUY?] code: %s, cur: %fd, predict: %d" % (code_list[idx], real_buy_price, pred_transform))
                 if pred_transform > real_buy_price * 1.01:
                     print("add to buy_list %d")
@@ -244,7 +247,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -331,14 +334,14 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20110101, 20170307)
-    sm.train_model_keras(X_train, Y_train, "20110101_20170307")
-    sm.save_scaler("20110101_20170307")
-    #sm.load_scaler("20110101_20160331")
+    #X_train, Y_train, _ = sm.load_all_data(20110101, 20170307)
+    #sm.train_model_keras(X_train, Y_train, "20110101_20170307")
+    #sm.save_scaler("20110101_20170307")
+    sm.load_scaler("20140101_20170228")
     #X_test, Y_test, Data = sm.load_all_data(20160303, 20160430)
     #sm.evaluate_model(X_test, Y_test, Data, "20110101_20160331")
 
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20110101_20170307")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20140101_20170228")
