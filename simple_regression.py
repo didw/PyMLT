@@ -50,12 +50,7 @@ class SimpleModel:
             X, Y = self.make_x_y(data, code[0])
             if len(X) <= 1: continue
             code_array = [code[0]] * len(X)
-            print(idx, split, len(code_list))
             assert len(X) == len(data.loc[29:len(data)-6, '일자'])
-            print(np.shape(data.loc[29:len(data)-6, '일자'].values.tolist()))
-            print(np.shape(code_array))
-            print(np.shape(data.loc[29:len(data)-6, '현재가']))
-            print(np.shape(data.loc[34:len(data), '현재가']))
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
@@ -64,7 +59,7 @@ class SimpleModel:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
                 DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist())
-            print(int(idx/split), np.shape(DATA_list[int(idx/split)]), np.shape(DATA_list[int(idx/split)][0]), np.shape(DATA_list[int(idx/split)][1]), np.shape(DATA_list[int(idx/split)][2]), np.shape(DATA_list[int(idx/split)][3]))
+            #print(int(idx/split), np.shape(DATA_list[int(idx/split)]), np.shape(DATA_list[int(idx/split)][0]), np.shape(DATA_list[int(idx/split)][1]), np.shape(DATA_list[int(idx/split)][2]), np.shape(DATA_list[int(idx/split)][3]))
             print(idx, np.shape(X_data_list[int(idx/split)]), np.shape(Y_data_list[int(idx/split)]))
             idx += 1
         for i in range(10):
@@ -131,13 +126,14 @@ class SimpleModel:
         print("finish training model")
         joblib.dump(self.estimator, model_name)
 
-    def train_model_keras(self, X_train, Y_train, date):
+    def set_config(self):
         #Tensorflow GPU optimization
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
         K.set_session(sess)
 
+    def train_model_keras(self, X_train, Y_train, date):
         print("training model %d_%d.h5" % (self.frame_len, self.predict_dist))
         model_name = "../model/reg_keras/%d_%d_%s.h5" % (self.frame_len, self.predict_dist, date)
         self.estimator = KerasRegressor(build_fn=baseline_model, nb_epoch=200, batch_size=64, verbose=1)
@@ -169,11 +165,14 @@ class SimpleModel:
         print("score: %f" % score)
         for idx in range(len(pred)):
             print(orig_data[idx])
-            print(X_test[idx][0], pred[idx])
+            print(X_test[idx][23*29], pred[idx])
             buy_price = int(orig_data[idx][2])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
-            if pred[idx] > X_test[idx][0]:
+            pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
+            cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            print("cur price: %d, transformed_price: %d" % (buy_price, cur_transform))
+            if pred_transform > buy_price * 1.01:
                 res += (future_price - buy_price*1.005)*(100000/buy_price+1)
                 print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
         print("result: %d" % res)
@@ -232,8 +231,9 @@ class SimpleModel:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
-                print("[BUY?] code: %s, cur: %f(%d), predict: %f" % (code_list[idx], buy_price, real_buy_price, pred[idx]))
-                if pred[idx] > buy_price:
+                pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
+                print("[BUY?] code: %s, cur: %fd, predict: %d" % (code_list[idx], real_buy_price, pred_transform))
+                if pred_transform > real_buy_price * 1.01:
                     print("add to buy_list %d")
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
@@ -244,7 +244,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -330,14 +330,15 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20140101, 20170228)
-    #sm.train_model_keras(X_train, Y_train, "20140101_20170228")
-    #sm.save_scaler("20140101_20170228")
-    sm.load_scaler("20140101_20170228")
-    #X_test, Y_test, Data = sm.load_all_data(20160101, 20160301)
-    #sm.evaluate_model(X_test, Y_test, Data, "20130101_20151231")
+    sm.set_config()
+    X_train, Y_train, _ = sm.load_all_data(20110101, 20170307)
+    sm.train_model_keras(X_train, Y_train, "20110101_20170307")
+    sm.save_scaler("20110101_20170307")
+    #sm.load_scaler("20110101_20160331")
+    #X_test, Y_test, Data = sm.load_all_data(20160303, 20160430)
+    #sm.evaluate_model(X_test, Y_test, Data, "20110101_20160331")
 
     #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
-    X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20140101_20170228")
+    #sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
+    #X_data, data = sm.load_data_in_account()
+    #sm.make_sell_list(X_data, data, "20110101_20170307")
