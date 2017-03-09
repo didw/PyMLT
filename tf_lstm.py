@@ -60,7 +60,7 @@ class TensorflowRegressorLSTM():
             for i in range(self.num_epoch):
                 print("Epoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
-                for j in range(len(X_data)/batch_size-1):
+                for j in range(int(len(X_data)/batch_size)-1):
                     X_batch = X_data[batch_size*j:batch_size*(j+1)].reshape(batch_size, time_length, 23)
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
                     _ = sess.run(self.updateModel, feed_dict={self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
