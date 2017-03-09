@@ -223,7 +223,11 @@ class SimpleModel:
         DATA = []
         code_list = list(map(lambda x: x[0], code_list))
         first = True
+        bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
             df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
             data = df.iloc[-30:,:]
             data = data.reset_index()
@@ -233,7 +237,6 @@ class SimpleModel:
                     data.loc[:, col] = data.loc[:, col].str.replace('+', '')
                 except AttributeError as e:
                     pass
-                    print(e)
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
@@ -246,24 +249,24 @@ class SimpleModel:
                 code_list.remove(code)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         X_test = np.array(X_test).reshape(-1, 23*30) 
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
         BUY_UNIT = 10000
         print("make buy_list")
-        if MODEL_TYPE == 'random_forest':
-            model_name = "../model/simple_reg_model/%d_%d.pkl" % (self.frame_len, self.predict_dist)
-            self.estimator = joblib.load(model_name)
-        elif MODEL_TYPE == 'keras':
-            model_name = "../model/reg_keras/%d_%d_%s.h5" % (self.frame_len, self.predict_dist, s_date)
-            self.estimator = model_from_json(open(model_name.replace('h5', 'json')).read())
-            self.estimator.load_weights(model_name)
+        self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
         pred = np.array(pred).reshape(-1)
+
+        # load code list from account
+        set_account = set([])
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+            for line in f_stocks.readlines():
+                data = line.split(',')
+                set_account.add(data[6].replace('A', ''))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt") as f_buy:
@@ -275,7 +278,7 @@ class SimpleModel:
                 except KeyError:
                     continue
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 2:
+                if pred_transform > real_buy_price * 3 and code_list[idx] not in set_account:
                     print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
@@ -286,7 +289,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -296,9 +299,11 @@ class SimpleModel:
         X_test = []
         idx_rm = []
         first = True
+        bar = ProgressBar(len(DATA), max_width=80)
         for idx, code in enumerate(DATA):
-            print(len(X_test)/30)
-            print(len(DATA) - len(idx_rm))
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
 
             try:
                 df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
@@ -327,7 +332,6 @@ class SimpleModel:
                 idx_rm.append(idx)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
         X_test = np.array(X_test).reshape(-1, 23*30) 
@@ -335,13 +339,7 @@ class SimpleModel:
 
     def make_sell_list(self, X_test, DATA, s_date):
         print("make sell_list")
-        if MODEL_TYPE == 'random_forest':
-            model_name = "../model/simple_reg_model/%d_%d.pkl" % (self.frame_len, self.predict_dist)
-            self.estimator = joblib.load(model_name)
-        elif MODEL_TYPE == 'keras':
-            model_name = "../model/reg_keras/%d_%d_%s.h5" % (self.frame_len, self.predict_dist, s_date)
-            self.estimator = model_from_json(open(model_name.replace('h5', 'json')).read())
-            self.estimator.load_weights(model_name)
+        self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
@@ -373,9 +371,9 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170309)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170309")
-    sm.save_scaler("20120101_20170309")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170309)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170309")
+    #sm.save_scaler("20120101_20170309")
     #sm.load_scaler("20120101_20170309")
     #X_test, Y_test, Data = sm.load_all_data(20160301, 20160501)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160330")
