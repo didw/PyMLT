@@ -12,8 +12,6 @@ from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 import os
-from tensorflow.python.ops import control_flow_ops 
-tf.python.control_flow_ops = control_flow_ops
 
 MODEL_TYPE = 'keras'
 def baseline_model():
@@ -131,7 +129,7 @@ class SimpleModel:
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
-        #K.set_session(sess)
+        K.set_session(sess)
 
     def train_model_keras(self, X_train, Y_train, date):
         print("training model %d_%d.h5" % (self.frame_len, self.predict_dist))
@@ -235,9 +233,9 @@ class SimpleModel:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
                 except KeyError:
                     continue
-                print("[BUY?] code: %s, cur: %fd, predict: %d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 1.01:
-                    print("add to buy_list %d")
+                print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
+                if pred_transform > real_buy_price * 2:
+                    print("add to buy_list %d" % int(code_list[idx]))
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
                     for item in buy_item:
@@ -247,7 +245,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -314,7 +312,7 @@ class SimpleModel:
                 current_price = float(X_test[idx][23*29])
                 current_real_price = int(DATA[idx][3])
                 name = DATA[idx][2]
-                print("[SELL?] name: %s, code: %s, cur: %f(%d), predict: %f" % (name, DATA[idx][0], current_price, current_real_price, pred[idx]))
+                print("[SELL PREDICT] name: %s, code: %s, cur: %f(%d), predict: %f" % (name, DATA[idx][0], current_price, current_real_price, pred[idx]))
                 if pred[idx] < current_price:
                     print("add to sell_list %s" % name)
                     sell_item[1] = DATA[idx][0]
@@ -334,14 +332,15 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20110101, 20170307)
-    #sm.train_model_keras(X_train, Y_train, "20110101_20170307")
-    #sm.save_scaler("20110101_20170307")
-    sm.load_scaler("20140101_20170228")
-    #X_test, Y_test, Data = sm.load_all_data(20160303, 20160430)
-    #sm.evaluate_model(X_test, Y_test, Data, "20110101_20160331")
+    X_train, Y_train, _ = sm.load_all_data(20110101, 20160630)
+    sm.train_model_keras(X_train, Y_train, "20110101_20160630")
+    sm.save_scaler("20110101_20160630")
+    sm.load_scaler("20110101_20160630")
+    X_test, Y_test, Data = sm.load_all_data(20160520, 20160901)
+    sm.evaluate_model(X_test, Y_test, Data, "20110101_20160630")
 
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20140101_20170228")
-    X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20140101_20170228")
+    #sm.load_scaler("20110101_20170307")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
+    #X_data, data = sm.load_data_in_account()
+    #sm.make_sell_list(X_data, data, "20110101_20170307")
