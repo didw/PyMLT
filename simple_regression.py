@@ -11,7 +11,8 @@ from keras.models import model_from_json
 from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
-import os
+import os, sys
+from etaprogress.progress import ProgressBar
 
 MODEL_TYPE = 'keras'
 def baseline_model():
@@ -42,6 +43,7 @@ class SimpleModel:
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
         idx = 0
         split = int(len(code_list) / 9)
+        bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
@@ -57,12 +59,16 @@ class SimpleModel:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
                 DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist())
-            #print(int(idx/split), np.shape(DATA_list[int(idx/split)]), np.shape(DATA_list[int(idx/split)][0]), np.shape(DATA_list[int(idx/split)][1]), np.shape(DATA_list[int(idx/split)][2]), np.shape(DATA_list[int(idx/split)][3]))
-            print(idx, np.shape(X_data_list[int(idx/split)]), np.shape(Y_data_list[int(idx/split)]))
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_data_list[int(idx/split)])), end='\r')
+            sys.stdout.flush()
             idx += 1
+        print("%s" % bar)
+
+        print("Merge splited data")
+        bar = ProgressBar(10, max_width=80)
         for i in range(10):
             if type(X_data_list[i]) == type(1):
-                print("type is int, need to pass", X_data_list[i])
                 continue
             if i == 0:
                 X_data = X_data_list[i]
@@ -72,7 +78,10 @@ class SimpleModel:
                 X_data.extend(X_data_list[i])
                 Y_data.extend(Y_data_list[i])
                 DATA.extend(DATA_list[i])
-            print("DATA", np.shape(DATA), np.shape(DATA[0]))
+            bar.numerator = i+1
+            print("%s | %d" % (bar, len(DATA)), end='\r')
+            sys.stdout.flush()
+        print("%s | %d" % (bar, len(DATA)))
         return np.array(X_data), np.array(Y_data), np.array(DATA)
 
     def load_data(self, code, begin_date, end_date):
@@ -162,14 +171,11 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            print(orig_data[idx])
-            print(X_test[idx][23*29], pred[idx])
             buy_price = int(orig_data[idx][2])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
             pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
             cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
-            print("cur price: %d, transformed_price: %d" % (buy_price, cur_transform))
             if pred_transform > buy_price * 1.01:
                 res += (future_price - buy_price*1.005)*(100000/buy_price+1)
                 print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
@@ -182,7 +188,11 @@ class SimpleModel:
         DATA = []
         code_list = list(map(lambda x: x[0], code_list))
         first = True
+        bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
             df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
             data = df.iloc[-30:,:]
             data = data.reset_index()
@@ -192,7 +202,6 @@ class SimpleModel:
                     data.loc[:, col] = data.loc[:, col].str.replace('+', '')
                 except AttributeError as e:
                     pass
-                    print(e)
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
@@ -205,7 +214,6 @@ class SimpleModel:
                 code_list.remove(code)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         X_test = np.array(X_test).reshape(-1, 23*30) 
         return X_test, code_list, DATA
 
@@ -224,6 +232,13 @@ class SimpleModel:
         score = 0
         pred = np.array(pred).reshape(-1)
 
+        # load code list from account
+        set_account = set([])
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+            for line in f_stocks.readlines():
+                data = line.split(',')
+                set_account.add(data[6].replace('A', ''))
+
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt") as f_buy:
             for idx in range(len(pred)):
@@ -234,8 +249,8 @@ class SimpleModel:
                 except KeyError:
                     continue
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 2:
-                    print("add to buy_list %d" % int(code_list[idx]))
+                if pred_transform > real_buy_price * 3 and code_list[idx] not in set_account:
+                    print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
                     for item in buy_item:
@@ -245,7 +260,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -255,9 +270,11 @@ class SimpleModel:
         X_test = []
         idx_rm = []
         first = True
+        bar = ProgressBar(len(DATA), max_width=80)
         for idx, code in enumerate(DATA):
-            print(len(X_test)/30)
-            print(len(DATA) - len(idx_rm))
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
 
             try:
                 df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
@@ -286,7 +303,6 @@ class SimpleModel:
                 idx_rm.append(idx)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
         X_test = np.array(X_test).reshape(-1, 23*30) 
@@ -320,6 +336,7 @@ class SimpleModel:
                     for item in sell_item:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
+
     def save_scaler(self, s_date):
         model_name = "../model/scaler_%s.pkl" % s_date
         joblib.dump(self.scaler, model_name)
@@ -332,15 +349,15 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20110101, 20160630)
-    sm.train_model_keras(X_train, Y_train, "20110101_20160630")
-    sm.save_scaler("20110101_20160630")
-    sm.load_scaler("20110101_20160630")
-    X_test, Y_test, Data = sm.load_all_data(20160520, 20160901)
-    sm.evaluate_model(X_test, Y_test, Data, "20110101_20160630")
+    #X_train, Y_train, _ = sm.load_all_data(20110101, 20160630)
+    #sm.train_model_keras(X_train, Y_train, "20110101_20160630")
+    #sm.save_scaler("20110101_20160630")
+    #sm.load_scaler("20110101_20160630")
+    #X_test, Y_test, Data = sm.load_all_data(20160520, 20160901)
+    #sm.evaluate_model(X_test, Y_test, Data, "20110101_20160630")
 
-    #sm.load_scaler("20110101_20170307")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
+    sm.load_scaler("20110101_20170307")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
     #X_data, data = sm.load_data_in_account()
     #sm.make_sell_list(X_data, data, "20110101_20170307")

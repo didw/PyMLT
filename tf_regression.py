@@ -40,7 +40,7 @@ class TensorflowRegressor():
         self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
         self.updateModel = self.trainer.minimize(self.loss)
         self.saver = tf.train.Saver([self.W1, self.b1, self.W2, self.b2])
-        self.model_dir = '../model/reg_tensorflow/%s/' % s_date
+        self.model_dir = '../model/tf/regression/%s/' % s_date
 
     def fit(self, X_data, Y_data):
         num_epoch = 20
@@ -49,12 +49,14 @@ class TensorflowRegressor():
         # Add an op to initialize the variables.
         init_op = tf.global_variables_initializer()
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
             sess.run(init_op)
             for i in range(num_epoch):
                 print("Epoch %d/%d is started" % (i+1, num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
-                for j in range(len(X_data)/batch_size-1):
+                for j in range(int(len(X_data)/batch_size)-1):
                     X_batch = X_data[batch_size*j:batch_size*(j+1)]
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
                     _ = sess.run(self.updateModel, feed_dict={self.scalarInput: X_batch, self.target: Y_batch})
@@ -66,13 +68,15 @@ class TensorflowRegressor():
                         sys.stdout.flush()
 
             if not os.path.exists(self.model_dir):
-                os.mkdir(self.model_dir)
+                os.makedirs(self.model_dir)
             save_path = self.saver.save(sess,'%s/model.ckpt' % self.model_dir)
             print("Model saved in file: %s" % save_path)
 
     def predict(self, X_data):
         init_op = tf.global_variables_initializer()
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
             sess.run(init_op)
             ckpt = tf.train.get_checkpoint_state(self.model_dir)
             self.saver.restore(sess, ckpt.model_checkpoint_path)
@@ -272,7 +276,7 @@ class SimpleModel:
                     continue
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
                 if pred_transform > real_buy_price * 2:
-                    print("add to buy_list %d" % code_list[idx])
+                    print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
                     for item in buy_item:
@@ -369,15 +373,15 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20160330)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20160330")
-    sm.save_scaler("20120101_20160330")
-    sm.load_scaler("20120101_20160330")
-    X_test, Y_test, Data = sm.load_all_data(20160301, 20160501)
-    sm.evaluate_model(X_test, Y_test, Data, "20120101_20160330")
-
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170309)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170309")
+    sm.save_scaler("20120101_20170309")
     #sm.load_scaler("20120101_20170309")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170309")
+    #X_test, Y_test, Data = sm.load_all_data(20160301, 20160501)
+    #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160330")
+
+    sm.load_scaler("20120101_20170309")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20120101_20170309")
