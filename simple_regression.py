@@ -234,7 +234,7 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(data[6].replace('A', ''))
@@ -260,7 +260,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -336,7 +336,6 @@ class SimpleModel:
                     for item in sell_item:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
-
     def save_scaler(self, s_date):
         model_name = "../model/scaler_%s.pkl" % s_date
         joblib.dump(self.scaler, model_name)
@@ -349,15 +348,15 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20110101, 20160630)
-    #sm.train_model_keras(X_train, Y_train, "20110101_20160630")
-    #sm.save_scaler("20110101_20160630")
-    #sm.load_scaler("20110101_20160630")
-    #X_test, Y_test, Data = sm.load_all_data(20160520, 20160901)
-    #sm.evaluate_model(X_test, Y_test, Data, "20110101_20160630")
+    X_train, Y_train, _ = sm.load_all_data(20110101, 20160630)
+    sm.train_model_keras(X_train, Y_train, "20110101_20160630")
+    sm.save_scaler("20110101_20160630")
+    sm.load_scaler("20110101_20160630")
+    X_test, Y_test, Data = sm.load_all_data(20160520, 20160901)
+    sm.evaluate_model(X_test, Y_test, Data, "20110101_20160630")
 
-    sm.load_scaler("20110101_20170307")
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
+    #sm.load_scaler("20110101_20170307")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20110101_20170307")
     #X_data, data = sm.load_data_in_account()
     #sm.make_sell_list(X_data, data, "20110101_20170307")

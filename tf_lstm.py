@@ -23,7 +23,8 @@ class TensorflowRegressorLSTM():
         # Create two variables.
         tf.reset_default_graph()
 
-        self.num_epoch = 200
+        self.num_epoch = 20
+        self.lr = tf.placeholder(dtype=tf.float32)
         self.batch_size = tf.placeholder(dtype=tf.int32)
         self.time_length = tf.placeholder(dtype=tf.int32)
 
@@ -44,7 +45,7 @@ class TensorflowRegressorLSTM():
         self.target = tf.placeholder(shape=[None],dtype=tf.float32)
         self.error = tf.square(self.target - self.output)
         self.loss = tf.reduce_mean(self.error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
+        self.trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
         self.updateModel = self.trainer.minimize(self.loss)
         self.saver = tf.train.Saver()
         self.model_dir = '../model/tf/lstm/%s/' % s_date
@@ -55,18 +56,22 @@ class TensorflowRegressorLSTM():
         batch_size = 64
         time_length = 30
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        lr = 0.0005
+        with tf.Session(config=config) as sess:
             sess.run(init_op)
             for i in range(self.num_epoch):
-                print("Epoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
+                lr *= 0.9
+                print("\nEpoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
                 for j in range(int(len(X_data)/batch_size)-1):
                     X_batch = X_data[batch_size*j:batch_size*(j+1)].reshape(batch_size, time_length, 23)
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
-                    _ = sess.run(self.updateModel, feed_dict={self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
+                    _ = sess.run(self.updateModel, feed_dict={self.lr:lr, self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
 
-                    if j%100 == 0:
-                        loss = sess.run(self.loss, feed_dict={self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
+                    if j%10 == 0:
+                        loss = sess.run(self.loss, feed_dict={self.lr:lr, self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
                         bar.numerator = j+1
                         print("%s | loss: %f" % (bar, loss), end='\r')
                         sys.stdout.flush()
@@ -80,7 +85,9 @@ class TensorflowRegressorLSTM():
         init_op = tf.global_variables_initializer()
         batch_size = 1
         time_length = 30
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
             sess.run(init_op)
             ckpt = tf.train.get_checkpoint_state(self.model_dir)
             self.saver.restore(sess, ckpt.model_checkpoint_path)
@@ -200,14 +207,17 @@ class SimpleModel:
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
 
-    def evaluate_model(self, X_test, Y_test, orig_data, s_date):
+    def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):
         print("Evaluate model test.ckpt")
         h_size = 200
         cell = tf.contrib.rnn.LSTMCell(num_units=h_size,state_is_tuple=True)
         self.estimator = TensorflowRegressorLSTM(h_size, cell, s_date)
         pred = self.estimator.predict(X_test)
-        res = 0
         score = 0
+        ratio = [1, 1.01, 1.02, 1.05, 1.1, 1.5, 2, 2.5, 3]
+        freq = [0]*len(ratio)
+        res = [0]*len(ratio)
+        date_min, date_max = 99999999, 0
         assert(len(pred) == len(Y_test))
         pred = np.array(pred).reshape(-1)
         Y_test = np.array(Y_test).reshape(-1)
@@ -219,12 +229,25 @@ class SimpleModel:
             buy_price = int(orig_data[idx][2])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
+            date_min = min(date_min, date)
+            date_max = max(date_max, date)
             pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
             cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
-            if pred_transform > buy_price * 1.01:
-                res += (future_price - buy_price*1.005)*(100000/buy_price+1)
-                print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
-        print("result: %d" % res)
+            for j in range(len(ratio)):
+                if pred_transform > buy_price * ratio[j]:
+                    res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
+                    freq[j] += 1
+                    print("[%s, %d] buy: %6d, sell: %6d, earn: %6d" % (str(date), freq[j], buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
+        print("date length: %d - %d (%d)" % (date_min, date_max, int(len(pred)/2500)))
+        for i in range(len(res)):
+            if freq[i] == 0: continue
+            print("%5d times trade, ratio: %1.2f, result: %8d (%4d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+        if fname is not None:
+            fout = open(fname, 'wt')
+            fout.write("date length: %d - %d (%d)\n" % (date_min, date_max, int(len(pred)/2500)))
+            for i in range(len(res)):
+                if freq[i] == 0: continue
+                fout.write("%5d times trade, ratio: %1.2f, result: %8d (%4d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
         con = sqlite3.connect('../data/stock.db')
@@ -233,7 +256,11 @@ class SimpleModel:
         DATA = []
         code_list = list(map(lambda x: x[0], code_list))
         first = True
+        bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
             df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
             data = df.iloc[-30:,:]
             data = data.reset_index()
@@ -243,7 +270,6 @@ class SimpleModel:
                     data.loc[:, col] = data.loc[:, col].str.replace('+', '')
                 except AttributeError as e:
                     pass
-                    print(e)
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
@@ -256,24 +282,24 @@ class SimpleModel:
                 code_list.remove(code)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         X_test = np.array(X_test).reshape(-1, 23*30) 
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
         BUY_UNIT = 10000
         print("make buy_list")
-        if MODEL_TYPE == 'random_forest':
-            model_name = "../model/simple_reg_model/%d_%d.pkl" % (self.frame_len, self.predict_dist)
-            self.estimator = joblib.load(model_name)
-        elif MODEL_TYPE == 'keras':
-            model_name = "../model/reg_keras/%d_%d_%s.h5" % (self.frame_len, self.predict_dist, s_date)
-            self.estimator = model_from_json(open(model_name.replace('h5', 'json')).read())
-            self.estimator.load_weights(model_name)
+        self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
         pred = np.array(pred).reshape(-1)
+
+        # load code list from account
+        set_account = set([])
+        with open('../data/stocks_in_account.txt') as f_stocks:
+            for line in f_stocks.readlines():
+                data = line.split(',')
+                set_account.add(str(data[6].replace('A', '')))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt") as f_buy:
@@ -285,8 +311,8 @@ class SimpleModel:
                 except KeyError:
                     continue
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 2:
-                    print("add to buy_list %d" % code_list[idx])
+                if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
+                    print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
                     for item in buy_item:
@@ -306,9 +332,11 @@ class SimpleModel:
         X_test = []
         idx_rm = []
         first = True
+        bar = ProgressBar(len(DATA), max_width=80)
         for idx, code in enumerate(DATA):
-            print(len(X_test)/30)
-            print(len(DATA) - len(idx_rm))
+            bar.numerator += 1
+            print("%s | %d" % (bar, len(X_test)), end='\r')
+            sys.stdout.flush()
 
             try:
                 df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
@@ -337,7 +365,6 @@ class SimpleModel:
                 idx_rm.append(idx)
                 continue
             X_test.extend(np.array(data))
-            print(np.shape(X_test))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
         X_test = np.array(X_test).reshape(-1, 23*30) 
@@ -345,13 +372,7 @@ class SimpleModel:
 
     def make_sell_list(self, X_test, DATA, s_date):
         print("make sell_list")
-        if MODEL_TYPE == 'random_forest':
-            model_name = "../model/simple_reg_model/%d_%d.pkl" % (self.frame_len, self.predict_dist)
-            self.estimator = joblib.load(model_name)
-        elif MODEL_TYPE == 'keras':
-            model_name = "../model/reg_keras/%d_%d_%s.h5" % (self.frame_len, self.predict_dist, s_date)
-            self.estimator = model_from_json(open(model_name.replace('h5', 'json')).read())
-            self.estimator.load_weights(model_name)
+        self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
