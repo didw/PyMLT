@@ -22,6 +22,8 @@ class TensorflowRegressor():
         #It then resizes it and processes it through four convolutional layers.
         # Create two variables.
         tf.reset_default_graph()
+        self.num_epoch = 30
+        self.lr = tf.placeholder(dtype=tf.float32)
         self.W1 = tf.Variable(tf.random_normal([690, 200], stddev=0.35), name="W1")
         self.b1 = tf.Variable(tf.zeros([200]), name="b1")
         self.W2 = tf.Variable(tf.random_normal([200, 1], stddev=0.35), name="W2")
@@ -37,32 +39,32 @@ class TensorflowRegressor():
         self.target = tf.placeholder(shape=[None],dtype=tf.float32)
         self.error = tf.square(self.target - self.output)
         self.loss = tf.reduce_mean(self.error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
+        self.trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
         self.updateModel = self.trainer.minimize(self.loss)
         self.saver = tf.train.Saver([self.W1, self.b1, self.W2, self.b2])
         self.model_dir = '../model/tf/regression/%s/' % s_date
 
     def fit(self, X_data, Y_data):
-        num_epoch = 20
-        batch_size = 64
-
         # Add an op to initialize the variables.
         init_op = tf.global_variables_initializer()
+        batch_size = 64
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
+        lr = 0.0005
         with tf.Session(config=config) as sess:
             sess.run(init_op)
-            for i in range(num_epoch):
-                print("Epoch %d/%d is started" % (i+1, num_epoch), end='\n')
+            for i in range(self.num_epoch):
+                lr *= 0.9
+                print("\nEpoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
                 for j in range(int(len(X_data)/batch_size)-1):
                     X_batch = X_data[batch_size*j:batch_size*(j+1)]
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
-                    _ = sess.run(self.updateModel, feed_dict={self.scalarInput: X_batch, self.target: Y_batch})
+                    _ = sess.run(self.updateModel, feed_dict={self.lr:lr, self.scalarInput: X_batch, self.target: Y_batch})
 
-                    if j%100 == 0:
-                        loss = sess.run(self.loss, feed_dict={self.scalarInput: X_batch, self.target: Y_batch})
+                    if j%10 == 0:
+                        loss = sess.run(self.loss, feed_dict={self.lr:lr, self.scalarInput: X_batch, self.target: Y_batch})
                         bar.numerator = j+1
                         print("%s | loss: %f" % (bar, loss), end='\r')
                         sys.stdout.flush()
@@ -192,12 +194,15 @@ class SimpleModel:
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
 
-    def evaluate_model(self, X_test, Y_test, orig_data, s_date):
+    def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):
         print("Evaluate model test.ckpt")
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
-        res = 0
         score = 0
+        ratio = [1, 1.01, 1.02, 1.05, 1.1, 1.5, 2, 2.5, 3]
+        freq = [0]*len(ratio)
+        res = [0]*len(ratio)
+        date_min, date_max = 99999999, 0
         assert(len(pred) == len(Y_test))
         pred = np.array(pred).reshape(-1)
         Y_test = np.array(Y_test).reshape(-1)
@@ -209,12 +214,25 @@ class SimpleModel:
             buy_price = int(orig_data[idx][2])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
+            date_min = min(date_min, date)
+            date_max = max(date_max, date)
             pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
             cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
-            if pred_transform > buy_price * 1.01:
-                res += (future_price - buy_price*1.005)*(100000/buy_price+1)
-                print("[%s] buy: %6d, sell: %6d, earn: %6d" % (str(date), buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
-        print("result: %d" % res)
+            for j in range(len(ratio)):
+                if pred_transform > buy_price * ratio[j]:
+                    res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
+                    freq[j] += 1
+                    print("[%s, %d] buy: %6d, sell: %6d, earn: %6d" % (str(date), freq[j], buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
+        print("date length: %d - %d (%d)" % (date_min, date_max, int(len(pred)/2500)))
+        for i in range(len(res)):
+            if freq[i] == 0: continue
+            print("%5d times trade, ratio: %1.2f, result: %8d (%4d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+        if fname is not None:
+            fout = open(fname, 'wt')
+            fout.write("date length: %d - %d (%d)\n" % (date_min, date_max, int(len(pred)/2500)))
+            for i in range(len(res)):
+                if freq[i] == 0: continue
+                fout.write("%5d times trade, ratio: %1.2f, result: %8d (%4d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
         con = sqlite3.connect('../data/stock.db')
@@ -263,10 +281,10 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
-                set_account.add(data[6].replace('A', ''))
+                set_account.add(str(data[6].replace('A', '')))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt") as f_buy:
@@ -278,7 +296,7 @@ class SimpleModel:
                 except KeyError:
                     continue
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 3 and code_list[idx] not in set_account:
+                if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
                     print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
@@ -289,7 +307,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -371,15 +389,109 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170309)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170309")
-    #sm.save_scaler("20120101_20170309")
-    #sm.load_scaler("20120101_20170309")
-    #X_test, Y_test, Data = sm.load_all_data(20160301, 20160501)
-    #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160330")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20160730)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20160730")
+    sm.save_scaler("20120101_20160730")
+    sm.load_scaler("20120101_20160730")
+    X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
+    sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170309")
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170309")
+    #sm.load_scaler("20120101_20170309")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    #X_data, data = sm.load_data_in_account()
+    #sm.make_sell_list(X_data, data, "20120101_20170309")
+"""
+result
+1. DATA: 20120101_20160330
+a. date length: 20160404 - 20160428 (16)
+13672 times trade, ratio: 1.00, result:  8518917 ( 623)
+10568 times trade, ratio: 1.01, result:  7399085 ( 700)
+ 8059 times trade, ratio: 1.02, result:  6774314 ( 840)
+ 4243 times trade, ratio: 1.05, result:  5188120 (1222)
+ 2079 times trade, ratio: 1.10, result:  3236100 (1556)
+  298 times trade, ratio: 1.50, result:  -218290 (-732)
+  125 times trade, ratio: 2.00, result:  -104943 (-839)
+   95 times trade, ratio: 2.50, result:  -133305 (-1403)
+   63 times trade, ratio: 3.00, result:   -43232 (-686)
+b. date length: 20160502 - 20160601 (19)
+19490 times trade, ratio: 1.00, result: -2425263 (-124)
+15151 times trade, ratio: 1.01, result: -1000211 ( -66)
+11791 times trade, ratio: 1.02, result:  -608315 ( -51)
+ 6262 times trade, ratio: 1.05, result:   732069 ( 116)
+ 2699 times trade, ratio: 1.10, result:   969196 ( 359)
+  284 times trade, ratio: 1.50, result:   697218 (2454)
+  134 times trade, ratio: 2.00, result:   766307 (5718)
+   87 times trade, ratio: 2.50, result:   335627 (3857)
+   69 times trade, ratio: 3.00, result:   246596 (3573)
+c. date length: 20160603 - 20160701 (18)
+19671 times trade, ratio: 1.00, result: -5165972 (-262)
+15553 times trade, ratio: 1.01, result: -1869095 (-120)
+12102 times trade, ratio: 1.02, result:   186830 (  15)
+ 6049 times trade, ratio: 1.05, result:  2628491 ( 434)
+ 2434 times trade, ratio: 1.10, result:  1216399 ( 499)
+  218 times trade, ratio: 1.50, result:  -471260 (-2161)
+  102 times trade, ratio: 2.00, result:  -140877 (-1381)
+   67 times trade, ratio: 2.50, result:  -131047 (-1955)
+   57 times trade, ratio: 3.00, result:  -161333 (-2830)
+
+
+2. DATA: 20120101_20160430
+a. date length: 20160502 - 20160601 (19)
+20167 times trade, ratio: 1.00, result: -2006599 ( -99)
+15018 times trade, ratio: 1.01, result:  -488002 ( -32)
+11392 times trade, ratio: 1.02, result:   332280 (  29)
+ 5418 times trade, ratio: 1.05, result:  1042224 ( 192)
+ 2216 times trade, ratio: 1.10, result:   786968 ( 355)
+  233 times trade, ratio: 1.50, result:   717990 (3081)
+  112 times trade, ratio: 2.00, result:    66322 ( 592)
+   76 times trade, ratio: 2.50, result:     8554 ( 112)
+   55 times trade, ratio: 3.00, result:   -56765 (-1032)
+b. date length: 20160603 - 20160701 (18)
+20122 times trade, ratio: 1.00, result: -5786758 (-287)
+15625 times trade, ratio: 1.01, result: -1162031 ( -74)
+11871 times trade, ratio: 1.02, result:  2202977 ( 185)
+ 5518 times trade, ratio: 1.05, result:  3180208 ( 576)
+ 2174 times trade, ratio: 1.10, result:  1784537 ( 820)
+  205 times trade, ratio: 1.50, result:  -280261 (-1367)
+   93 times trade, ratio: 2.00, result:  -103007 (-1107)
+   60 times trade, ratio: 2.50, result:  -168534 (-2808)
+   43 times trade, ratio: 3.00, result:  -124300 (-2890)
+
+
+2. DATA: 20120101_20160630
+a. date length: 20160704 - 20160802 (20)
+12811 times trade, ratio: 1.00, result:  5413983
+ 9150 times trade, ratio: 1.01, result:  4125016
+ 6666 times trade, ratio: 1.02, result:  3250145
+ 2825 times trade, ratio: 1.05, result:  1366772
+  975 times trade, ratio: 1.10, result:  -141279
+  105 times trade, ratio: 1.50, result:  -228538
+   54 times trade, ratio: 2.00, result:   -93332
+   43 times trade, ratio: 2.50, result:    -5653
+   32 times trade, ratio: 3.00, result:   117652
+
+b. date length: 20160801 - 20160902 (22)
+14641 times trade, ratio: 1.00, result: -11762421 (-803)
+10482 times trade, ratio: 1.01, result: -8508369 (-811)
+ 7801 times trade, ratio: 1.02, result: -6210787 (-796)
+ 3440 times trade, ratio: 1.05, result: -3305090 (-960)
+ 1183 times trade, ratio: 1.10, result: -1672804 (-1414)
+  104 times trade, ratio: 1.50, result:  -149441 (-1436)
+   57 times trade, ratio: 2.00, result:   -62254 (-1092)
+   40 times trade, ratio: 2.50, result:    38726 ( 968)
+   33 times trade, ratio: 3.00, result:    50581 (1532)
+
+3. DATA: 20120101_20160730
+date length: 20160801 - 20160902 (22)
+19906 times trade, ratio: 1.00, result: -17320220 (-870)
+14760 times trade, ratio: 1.01, result: -13056026 (-884)
+11313 times trade, ratio: 1.02, result: -10500989 (-928)
+ 5629 times trade, ratio: 1.05, result: -6039715 (-1072)
+ 2229 times trade, ratio: 1.10, result: -3263950 (-1464)
+  341 times trade, ratio: 1.50, result:  -705468 (-2068)
+  180 times trade, ratio: 2.00, result:  -247646 (-1375)
+  118 times trade, ratio: 2.50, result:  -160064 (-1356)
+  106 times trade, ratio: 3.00, result:  -125409 (-1183)
+"""
+
