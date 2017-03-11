@@ -48,10 +48,11 @@ def simulation_daily_trade(estimator, code, start_date, end_date):
     account_balance = 0
     scaler = load_scaler("20110101_20160331")
     print(len(code_data))
-    for idx in range(LEN_PAST, len(code_data)):
+    for idx in range(LEN_PAST, len(code_data)-1):
         X_data = code_data[idx - LEN_PAST: idx]
         X_data = X_data.reset_index()
         cur_real_price = int(X_data.loc[29, '현재가'])
+        trade_price = int(code_data.loc[idx, '시가'])
         X_data.loc[:, 'month'] = X_data.loc[:, '일자'].str[4:6]
         X_data = X_data.drop(['index', '일자', '체결강도'], axis=1)
         X_data = scaler[code[0]].transform(X_data)
@@ -60,8 +61,7 @@ def simulation_daily_trade(estimator, code, start_date, end_date):
         pred = estimator.predict(X_data)[0][0]
         pred_transform = scaler[code[0]].inverse_transform([pred] + [0]*22)[0]
         #print(pred, cur_price)
-        #if pred_transform > cur_real_price*1.01 and qty == 0:
-        if pred > cur_price and qty == 0:
+        if pred_transform > 2*cur_real_price and qty == 0:
             qty += (MONEY / cur_real_price + 1)
             account_balance -= cur_real_price * (MONEY / cur_real_price + 1)
             print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, cur_real_price, qty))

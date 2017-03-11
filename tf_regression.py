@@ -226,13 +226,13 @@ class SimpleModel:
         print("date length: %d - %d (%d)" % (date_min, date_max, int(len(pred)/2500)))
         for i in range(len(res)):
             if freq[i] == 0: continue
-            print("%5d times trade, ratio: %1.2f, result: %8d (%4d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+            print("%5d times trade, ratio: %1.2f, result: %10d (%6d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
         if fname is not None:
             fout = open(fname, 'wt')
             fout.write("date length: %d - %d (%d)\n" % (date_min, date_max, int(len(pred)/2500)))
             for i in range(len(res)):
                 if freq[i] == 0: continue
-                fout.write("%5d times trade, ratio: %1.2f, result: %8d (%4d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+                fout.write("%5d times trade, ratio: %1.2f, result: %10d (%6d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
         con = sqlite3.connect('../data/stock.db')
