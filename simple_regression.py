@@ -234,7 +234,7 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(data[6].replace('A', ''))
@@ -260,7 +260,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+        with open('../data/stocks_in_account.txt') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])

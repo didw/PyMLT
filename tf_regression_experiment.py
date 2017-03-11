@@ -33,12 +33,12 @@ def simulate(bd, ed):
     test_bd = int(test_bd.strftime("%Y%m%d"))
     test_ed = int(test_ed.strftime("%Y%m%d"))
     print("Evaluation on %d - %d" % (test_bd, test_ed))
-    X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
+    X_test, Y_test, Data = sm.load_all_data(test_bd, test_ed)
     fname = "../experiments/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
     if not os.path.exists("../experiments/%s/" % s_date):
         os.makedirs("../experiments/%s/" % s_date)
     print("Save results to %s" % fname)
-    sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730", fname)
+    sm.evaluate_model(X_test, Y_test, Data, s_date, fname)
 
 
 def simulate_all():
@@ -57,17 +57,3 @@ def simulate_all():
 
 if __name__ == '__main__':
     simulate_all()
-    #sm = SimpleModel()
-    #sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20160730)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20160730")
-    #sm.save_scaler("20120101_20160730")
-    #sm.load_scaler("20120101_20160730")
-    #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
-    #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
-
-    #sm.load_scaler("20120101_20170309")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170309")
