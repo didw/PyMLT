@@ -127,10 +127,13 @@ class Simulation:
         code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         account_balance = 0
         idx = 0
+        trade = 0
         for code in code_list:
-            account_balance += self.simulation_daily_trade(code, start_date, end_date)
+            res = self.simulation_daily_trade(code, start_date, end_date)
+            if res != 0: trade += 1
             idx += 1
-            print("[%d] balance: %d" % (idx, account_balance))
+            account_balance += res
+            print("[%d/%d] balance: %d" % (trade, idx, account_balance))
 
 
 if __name__ == '__main__':
