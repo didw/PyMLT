@@ -48,13 +48,11 @@ class Simulation:
                 data.loc[:, col] = data.loc[:, col].str.replace('+', '')
             except AttributeError as e:
                 pass
-                print(e)
         days = data.index[:]
         try:
             data.loc[:, 'month'] = data.index[:].str[4:6]
         except AttributeError as e:
-            print(e)
-            print(data.index[:])
+            pass
         data = data.drop(['체결강도'], axis=1)
 
         # normalization
@@ -97,20 +95,30 @@ class Simulation:
         MONEY = 100000
         qty = 0
         account_balance = 0
+        day_last = 0
         pred_list = self.predict(X_data)
         for idx in range(len(X_data)-1):
             pred = pred_list[idx][0]
             cur_price = X_data[idx][29*23]
             buying_price = X_data[idx+1][29*23+3]
+            #print("buying_price: %f" % buying_price)
             pred_transform = self.scaler[code[0]].inverse_transform([pred] + [0]*22)[0]
             cur_real_price = self.scaler[code[0]].inverse_transform([cur_price] + [0]*22)[0]
-            buying_real_price = self.scaler[code[0]].inverse_transform([0]*3 + [buying_price] + [0]*19)[0]
+            #print([0]*3 + [buying_price] + [0]*19)
+            buying_real_price = self.scaler[code[0]].inverse_transform([0]*3 + [buying_price] + [0]*19)[3]
             #print(pred, cur_price)
+            day_last += 1
             if pred_transform > 2*cur_real_price and qty == 0:
+                day_last = 0
                 qty += (MONEY / buying_real_price + 1)
                 account_balance -= buying_real_price * (MONEY / buying_real_price + 1)
+                #print("pred: %.2f, %d, cur: %.2f, %d" % (pred, pred_transform, cur_price, cur_real_price))
                 print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, buying_real_price, qty))
-            if pred < cur_price and qty > 0:
+            elif day_last >= 5 and qty > 0 and False:
+                account_balance += 0.995 * buying_real_price * qty
+                qty = 0
+                print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
+            elif pred < cur_price and qty > 0:
                 account_balance += 0.995 * buying_real_price * qty
                 qty = 0
                 print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
@@ -126,7 +134,7 @@ class Simulation:
         idx = 0
         trade = 0
         for code in code_list:
-            res = self.simulation_daily_trade(code, start_date, end_date)
+            res = self.simulation_daily_trade(code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
             idx += 1
             if res != 0:
                 trade += 1
