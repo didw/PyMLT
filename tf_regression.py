@@ -272,7 +272,7 @@ class SimpleModel:
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 10000
+        BUY_UNIT = 20000
         print("make buy_list")
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
@@ -282,7 +282,7 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(str(data[6].replace('A', '')))
@@ -292,12 +292,14 @@ class SimpleModel:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
+                buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
                 except KeyError:
                     continue
+                print("buy_price: %d, real_buy_price: %d" % (buy_price_transform, real_buy_price))
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
-                if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
+                if pred_transform > 2*real_buy_price and code_list[idx] not in set_account:
                     print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
@@ -308,7 +310,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -390,18 +392,18 @@ class SimpleModel:
 if __name__ == '__main__':
     sm = SimpleModel()
     sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20160730)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20160730")
-    sm.save_scaler("20120101_20160730")
-    sm.load_scaler("20120101_20160730")
-    X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
-    sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20160730)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20160730")
+    #sm.save_scaler("20120101_20160730")
+    #sm.load_scaler("20120101_20160730")
+    #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
+    #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    #sm.load_scaler("20120101_20170309")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170309")
+    sm.load_scaler("20120101_20170309")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20120101_20170309")
 """
 result
 1. DATA: 20120101_20160330
