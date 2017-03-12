@@ -2,17 +2,12 @@
 import pandas as pd
 import numpy as np
 import sqlite3
-#from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-#from keras.models import Sequential
-#from keras.layers import Dense, Dropout, normalization
-#from keras.wrappers.scikit_learn import KerasRegressor
-#from keras.models import model_from_json
-#from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
+import datetime
 
 
 class Simulation:
@@ -103,26 +98,28 @@ class Simulation:
         qty = 0
         account_balance = 0
         pred_list = self.predict(X_data)
-        for idx in range(len(X_data)):
+        for idx in range(len(X_data)-1):
             pred = pred_list[idx][0]
             cur_price = X_data[idx][29*23]
+            buying_price = X_data[idx+1][29*23+3]
             pred_transform = self.scaler[code[0]].inverse_transform([pred] + [0]*22)[0]
             cur_real_price = self.scaler[code[0]].inverse_transform([cur_price] + [0]*22)[0]
+            buying_real_price = self.scaler[code[0]].inverse_transform([0]*3 + [buying_price] + [0]*19)[0]
             #print(pred, cur_price)
             if pred_transform > 2*cur_real_price and qty == 0:
-                qty += (MONEY / cur_real_price + 1)
-                account_balance -= cur_real_price * (MONEY / cur_real_price + 1)
-                print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, cur_real_price, qty))
+                qty += (MONEY / buying_real_price + 1)
+                account_balance -= buying_real_price * (MONEY / buying_real_price + 1)
+                print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, buying_real_price, qty))
             if pred < cur_price and qty > 0:
-                account_balance += 0.995 * cur_real_price * qty
+                account_balance += 0.995 * buying_real_price * qty
                 qty = 0
-                print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, cur_real_price, qty))
+                print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
         if qty > 0:
-            account_balance += 0.995 * cur_real_price * qty
-            print("[L SELL] balance: %d, price: %d, qty: %d" % (account_balance, cur_real_price, qty))
+            account_balance += 0.995 * buying_real_price * qty
+            print("[L SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
         return account_balance
 
-    def simulation_all_daily_trade(self, start_date, end_date):
+    def simulation_monthly_daily_trade(self, start_date, end_date):
         con = sqlite3.connect('../data/stock.db')
         code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         account_balance = 0
@@ -130,13 +127,28 @@ class Simulation:
         trade = 0
         for code in code_list:
             res = self.simulation_daily_trade(code, start_date, end_date)
-            if res != 0: trade += 1
             idx += 1
-            account_balance += res
-            print("[%d/%d] balance: %d" % (trade, idx, account_balance))
+            if res != 0:
+                trade += 1
+                account_balance += res
+                print("[%d/%d] balance: %d" % (trade, idx, account_balance))
+        return account_balance
+
+    def simulation_all(self):
+        begin_month = 201501
+        res = 0
+        while begin_month <= 201701:
+            self.model_dir = '../model/tf/regression/%d01_%d01/' % (begin_month-500, begin_month)
+            print(self.model_dir)
+            begin_date = datetime.date(begin_month/100, begin_month%100, 1) - datetime.timedelta(days=40)
+            end_date = datetime.date(begin_month/100, begin_month%100, 1) + datetime.timedelta(days=40)
+            res += self.simulation_monthly_daily_trade(begin_date, end_date)
+            print("[%d]total res: %d" % (begin_month, res))
+            begin_month += 1
+            if begin_month%100 == 13:
+                begin_month += 88
 
 
 if __name__ == '__main__':
     sm = Simulation()
-    sm.simulation_all_daily_trade('20160220', '20160501')
-
+    sm.simulation_all()

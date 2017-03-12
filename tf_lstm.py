@@ -11,9 +11,10 @@ from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import model_from_json
 from keras import backend as K
 from sklearn.preprocessing import StandardScaler
-import tensorflow as tf
 import os, sys
 from etaprogress.progress import ProgressBar
+os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
+import tensorflow as tf
 
 
 class TensorflowRegressorLSTM():
