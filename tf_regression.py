@@ -399,11 +399,11 @@ if __name__ == '__main__':
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170309")
+    sm.load_scaler("20120101_20170311")
     X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170311")
     X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170309")
+    sm.make_sell_list(X_data, data, "20120101_20170311")
 """
 result
 1. DATA: 20120101_20160330
