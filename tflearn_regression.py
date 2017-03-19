@@ -5,11 +5,6 @@ import numpy as np
 import sqlite3
 from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, normalization
-from keras.wrappers.scikit_learn import KerasRegressor
-from keras.models import model_from_json
-from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import os, sys
 from etaprogress.progress import ProgressBar
@@ -140,6 +135,7 @@ class SimpleModel:
     def load_data(self, code, begin_date, end_date):
         con = sqlite3.connect('../data/stock.db')
         df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+        #df = pd.read_hdf('../data/stock/%s.h5'%code, 'table').sort_index()
         data = df.loc[df.index > str(begin_date)]
         data = data.loc[data.index < str(end_date)]
         data = data.reset_index()
