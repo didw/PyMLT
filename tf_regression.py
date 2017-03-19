@@ -293,6 +293,10 @@ class SimpleModel:
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
+                volume = float(X_test[idx][23*29+1])
+                volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[0]
+                if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
+                    continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
                 except KeyError:
@@ -380,6 +384,7 @@ class SimpleModel:
                     for item in sell_item:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
+
     def save_scaler(self, s_date):
         model_name = "../model/scaler_%s.pkl" % s_date
         joblib.dump(self.scaler, model_name)
