@@ -3,13 +3,7 @@ from __future__ import print_function
 import pandas as pd
 import numpy as np
 import sqlite3
-from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, normalization
-from keras.wrappers.scikit_learn import KerasRegressor
-from keras.models import model_from_json
-from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import os, sys
 from etaprogress.progress import ProgressBar
@@ -391,110 +385,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    sm.set_config()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170311)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170311")
-    sm.save_scaler("20120101_20170311")
+    #sm.set_config()
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170311)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170311")
+    #sm.save_scaler("20120101_20170311")
     #sm.load_scaler("20120101_20160730")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    #sm.load_scaler("20120101_20170309")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170309")
-"""
-result
-1. DATA: 20120101_20160330
-a. date length: 20160404 - 20160428 (16)
-13672 times trade, ratio: 1.00, result:  8518917 ( 623)
-10568 times trade, ratio: 1.01, result:  7399085 ( 700)
- 8059 times trade, ratio: 1.02, result:  6774314 ( 840)
- 4243 times trade, ratio: 1.05, result:  5188120 (1222)
- 2079 times trade, ratio: 1.10, result:  3236100 (1556)
-  298 times trade, ratio: 1.50, result:  -218290 (-732)
-  125 times trade, ratio: 2.00, result:  -104943 (-839)
-   95 times trade, ratio: 2.50, result:  -133305 (-1403)
-   63 times trade, ratio: 3.00, result:   -43232 (-686)
-b. date length: 20160502 - 20160601 (19)
-19490 times trade, ratio: 1.00, result: -2425263 (-124)
-15151 times trade, ratio: 1.01, result: -1000211 ( -66)
-11791 times trade, ratio: 1.02, result:  -608315 ( -51)
- 6262 times trade, ratio: 1.05, result:   732069 ( 116)
- 2699 times trade, ratio: 1.10, result:   969196 ( 359)
-  284 times trade, ratio: 1.50, result:   697218 (2454)
-  134 times trade, ratio: 2.00, result:   766307 (5718)
-   87 times trade, ratio: 2.50, result:   335627 (3857)
-   69 times trade, ratio: 3.00, result:   246596 (3573)
-c. date length: 20160603 - 20160701 (18)
-19671 times trade, ratio: 1.00, result: -5165972 (-262)
-15553 times trade, ratio: 1.01, result: -1869095 (-120)
-12102 times trade, ratio: 1.02, result:   186830 (  15)
- 6049 times trade, ratio: 1.05, result:  2628491 ( 434)
- 2434 times trade, ratio: 1.10, result:  1216399 ( 499)
-  218 times trade, ratio: 1.50, result:  -471260 (-2161)
-  102 times trade, ratio: 2.00, result:  -140877 (-1381)
-   67 times trade, ratio: 2.50, result:  -131047 (-1955)
-   57 times trade, ratio: 3.00, result:  -161333 (-2830)
-
-
-2. DATA: 20120101_20160430
-a. date length: 20160502 - 20160601 (19)
-20167 times trade, ratio: 1.00, result: -2006599 ( -99)
-15018 times trade, ratio: 1.01, result:  -488002 ( -32)
-11392 times trade, ratio: 1.02, result:   332280 (  29)
- 5418 times trade, ratio: 1.05, result:  1042224 ( 192)
- 2216 times trade, ratio: 1.10, result:   786968 ( 355)
-  233 times trade, ratio: 1.50, result:   717990 (3081)
-  112 times trade, ratio: 2.00, result:    66322 ( 592)
-   76 times trade, ratio: 2.50, result:     8554 ( 112)
-   55 times trade, ratio: 3.00, result:   -56765 (-1032)
-b. date length: 20160603 - 20160701 (18)
-20122 times trade, ratio: 1.00, result: -5786758 (-287)
-15625 times trade, ratio: 1.01, result: -1162031 ( -74)
-11871 times trade, ratio: 1.02, result:  2202977 ( 185)
- 5518 times trade, ratio: 1.05, result:  3180208 ( 576)
- 2174 times trade, ratio: 1.10, result:  1784537 ( 820)
-  205 times trade, ratio: 1.50, result:  -280261 (-1367)
-   93 times trade, ratio: 2.00, result:  -103007 (-1107)
-   60 times trade, ratio: 2.50, result:  -168534 (-2808)
-   43 times trade, ratio: 3.00, result:  -124300 (-2890)
-
-
-2. DATA: 20120101_20160630
-a. date length: 20160704 - 20160802 (20)
-12811 times trade, ratio: 1.00, result:  5413983
- 9150 times trade, ratio: 1.01, result:  4125016
- 6666 times trade, ratio: 1.02, result:  3250145
- 2825 times trade, ratio: 1.05, result:  1366772
-  975 times trade, ratio: 1.10, result:  -141279
-  105 times trade, ratio: 1.50, result:  -228538
-   54 times trade, ratio: 2.00, result:   -93332
-   43 times trade, ratio: 2.50, result:    -5653
-   32 times trade, ratio: 3.00, result:   117652
-
-b. date length: 20160801 - 20160902 (22)
-14641 times trade, ratio: 1.00, result: -11762421 (-803)
-10482 times trade, ratio: 1.01, result: -8508369 (-811)
- 7801 times trade, ratio: 1.02, result: -6210787 (-796)
- 3440 times trade, ratio: 1.05, result: -3305090 (-960)
- 1183 times trade, ratio: 1.10, result: -1672804 (-1414)
-  104 times trade, ratio: 1.50, result:  -149441 (-1436)
-   57 times trade, ratio: 2.00, result:   -62254 (-1092)
-   40 times trade, ratio: 2.50, result:    38726 ( 968)
-   33 times trade, ratio: 3.00, result:    50581 (1532)
-
-3. DATA: 20120101_20160730
-date length: 20160801 - 20160902 (22)
-19906 times trade, ratio: 1.00, result: -17320220 (-870)
-14760 times trade, ratio: 1.01, result: -13056026 (-884)
-11313 times trade, ratio: 1.02, result: -10500989 (-928)
- 5629 times trade, ratio: 1.05, result: -6039715 (-1072)
- 2229 times trade, ratio: 1.10, result: -3263950 (-1464)
-  341 times trade, ratio: 1.50, result:  -705468 (-2068)
-  180 times trade, ratio: 2.00, result:  -247646 (-1375)
-  118 times trade, ratio: 2.50, result:  -160064 (-1356)
-  106 times trade, ratio: 3.00, result:  -125409 (-1183)
-"""
-
+    sm.load_scaler("20120101_20170309")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20120101_20170309")
