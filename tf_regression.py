@@ -288,7 +288,7 @@ class SimpleModel:
                 set_account.add(str(data[6].replace('A', '')))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/buy_list.txt", "wt") as f_buy:
+        with open("../data/buy_list.txt", "wt", encoding='utf-8') as f_buy:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
@@ -371,7 +371,7 @@ class SimpleModel:
         pred = np.array(pred).reshape(-1)
 
         sell_item = ["매도", "", "시장가", 0, 0, "매도전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/sell_list.txt", "wt") as f_sell:
+        with open("../data/sell_list.txt", "wt", encoding='utf-8') as f_sell:
             for idx in range(len(pred)):
                 current_price = float(X_test[idx][23*29])
                 current_real_price = int(DATA[idx][3])
