@@ -36,15 +36,10 @@ class TensorflowRegressor():
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        with tf.Graph().as_default(), tf.Session(config=config) as sess:
-            sess.run(tf.global_variables_initializer())
-            tflearn.config.init_training_mode()
-            self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
-            if not os.path.exists(self.model_dir):
-                os.makedirs(self.model_dir)
-            self.estimators.save('%s/model.tfl' % self.model_dir)
+        self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
+        self.estimators.save('%s/model.tfl' % self.model_dir)
 
     def predict(self, X_data):
         self.estimators.load('%s/model.tfl' % self.model_dir)
@@ -68,8 +63,11 @@ class SimpleModel:
         for code in code_list:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
+            len_data = len(data)
             X, Y = self.make_x_y(data, code[0])
-            if len(X) <= 1: continue
+            if len(X) <= 10: continue
+            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 1000000000: # 10억 이하면 pass
+                continue
             code_array = [code[0]] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
@@ -152,6 +150,7 @@ class SimpleModel:
         #model = BaseModel()
         self.estimator = TensorflowRegressor(s_date)
         self.estimator.fit(X_train, Y_train)
+        del self.estimator
         print("finish training model")
 
     def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):

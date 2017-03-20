@@ -10,6 +10,7 @@ import os, sys
 from etaprogress.progress import ProgressBar
 from tflearn_regression import SimpleModel
 import datetime
+from multiprocessing import Process
 
 
 def simulate(bd, ed):
@@ -36,17 +37,18 @@ def simulate(bd, ed):
 
 
 def simulate_all():
-    base_month = 201510
+    base_month = 201501
     while base_month <= 201701:
         end_date = datetime.date(base_month/100, base_month%100, 1)
         begin_date = datetime.date(base_month/100-5, base_month%100, 1)
         print(begin_date)
-        simulate(begin_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
+        p = Process(target=simulate, args=(begin_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")))
+        p.start()
+        p.join()
+        #simulate(begin_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
         base_month += 1
         if base_month%100 > 12:
             base_month += 88
-
-            
 
 
 if __name__ == '__main__':
