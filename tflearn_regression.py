@@ -14,30 +14,6 @@ import tflearn
 
 class TensorflowRegressor():
     def __init__(self, s_date):
-        #The network recieves a frame from the game, flattened into an array.
-        #It then resizes it and processes it through four convolutional layers.
-        # Create two variables.
-        tf.reset_default_graph()
-        self.num_epoch = 30
-        self.lr = tf.placeholder(dtype=tf.float32)
-        self.W1 = tf.Variable(tf.random_normal([690, 200], stddev=0.35), name="W1")
-        self.b1 = tf.Variable(tf.zeros([200]), name="b1")
-        self.W2 = tf.Variable(tf.random_normal([200, 1], stddev=0.35), name="W2")
-        self.b2 = tf.Variable(tf.zeros([1]), name="b2")
-
-        self.scalarInput =  tf.placeholder(shape=[None,690],dtype=tf.float32)
-        self.out1 = tf.matmul(self.scalarInput, self.W1) + self.b1
-        self.stream1 = tf.layers.dropout(tf.nn.relu(self.out1), rate=0.5)
-        #self.output = tf.layers.dense(self.stream1, 1)
-        self.output = tf.matmul(self.stream1, self.W2) + self.b2
-        
-        #Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
-        self.target = tf.placeholder(shape=[None],dtype=tf.float32)
-        self.error = tf.square(self.target - self.output)
-        self.loss = tf.reduce_mean(self.error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
-        self.updateModel = self.trainer.minimize(self.loss)
-        self.saver = tf.train.Saver([self.W1, self.b1, self.W2, self.b2])
         prev_bd = int(s_date[:6])-1
         prev_ed = int(s_date[9:15])-1
         if prev_bd%100 == 0: prev_bd -= 98
@@ -60,17 +36,15 @@ class TensorflowRegressor():
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
-        init_op = tf.global_variables_initializer()
-        batch_size = 64
-
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
-        lr = 0.0005
-
-        self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
-        if not os.path.exists(self.model_dir):
-            os.makedirs(self.model_dir)
-        self.estimators.save('%s/model.tfl' % self.model_dir)
+        with tf.Graph().as_default(), tf.Session(config=config) as sess:
+            sess.run(tf.global_variables_initializer())
+            tflearn.config.init_training_mode()
+            self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
+            if not os.path.exists(self.model_dir):
+                os.makedirs(self.model_dir)
+            self.estimators.save('%s/model.tfl' % self.model_dir)
 
     def predict(self, X_data):
         self.estimators.load('%s/model.tfl' % self.model_dir)
@@ -172,13 +146,6 @@ class SimpleModel:
         np_x = np.array(data_x).reshape(-1, 23*30)
         np_y = np.array(data_y)
         return np_x, np_y
-
-    def set_config(self):
-        #Tensorflow GPU optimization
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        K.set_session(sess)
 
     def train_model_tensorflow(self, X_train, Y_train, s_date):
         print("training model %s model.cptk" % s_date)
@@ -386,16 +353,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170311)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170311")
-    #sm.save_scaler("20120101_20170311")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170320)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170320")
+    sm.save_scaler("20120101_20170320")
     #sm.load_scaler("20120101_20160730")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170309")
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170309")
+    #sm.load_scaler("20120101_20170309")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
+    #X_data, data = sm.load_data_in_account()
+    #sm.make_sell_list(X_data, data, "20120101_20170309")
+

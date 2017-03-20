@@ -5,13 +5,7 @@ import numpy as np
 import sqlite3
 from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, normalization
-from keras.wrappers.scikit_learn import KerasRegressor
-from keras.models import model_from_json
-from keras import backend as K
 from sklearn.preprocessing import StandardScaler
-import tensorflow as tf
 import os, sys
 from etaprogress.progress import ProgressBar
 from tflearn_regression import SimpleModel
@@ -42,7 +36,7 @@ def simulate(bd, ed):
 
 
 def simulate_all():
-    base_month = 201508
+    base_month = 201510
     while base_month <= 201701:
         end_date = datetime.date(base_month/100, base_month%100, 1)
         begin_date = datetime.date(base_month/100-5, base_month%100, 1)
