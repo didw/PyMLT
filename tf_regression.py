@@ -3,13 +3,7 @@ from __future__ import print_function
 import pandas as pd
 import numpy as np
 import sqlite3
-from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, normalization
-from keras.wrappers.scikit_learn import KerasRegressor
-from keras.models import model_from_json
-from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import os, sys
 from etaprogress.progress import ProgressBar
@@ -103,10 +97,13 @@ class SimpleModel:
         for code in code_list:
             data = self.load_data(code[0], begin_date, end_date)
             data = data.dropna()
+            len_data = len(data)
             X, Y = self.make_x_y(data, code[0])
-            if len(X) <= 1: continue
+            if len(X) <= 10: continue
+            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
+                continue
             code_array = [code[0]] * len(X)
-            assert len(X) == len(data.loc[29:len(data)-6, '일자'])
+            assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
@@ -143,6 +140,7 @@ class SimpleModel:
     def load_data(self, code, begin_date, end_date):
         con = sqlite3.connect('../data/stock.db')
         df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+        #df = pd.read_hdf('../data/stock/%s.h5'%code, 'table').sort_index()
         data = df.loc[df.index > str(begin_date)]
         data = data.loc[data.index < str(end_date)]
         data = data.reset_index()
@@ -181,13 +179,6 @@ class SimpleModel:
         np_y = np.array(data_y)
         return np_x, np_y
 
-    def set_config(self):
-        #Tensorflow GPU optimization
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        K.set_session(sess)
-
     def train_model_tensorflow(self, X_train, Y_train, s_date):
         print("training model %s model.cptk" % s_date)
         #model = BaseModel()
@@ -217,8 +208,13 @@ class SimpleModel:
             date = int(orig_data[idx][0])
             date_min = min(date_min, date)
             date_max = max(date_max, date)
-            pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
-            cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            try:
+                pred_transform = self.scaler[str(orig_data[idx][1])].inverse_transform([pred[idx]] + [0]*22)[0]
+                cur_transform = self.scaler[str(orig_data[idx][1])].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            except (KeyError, ValueError) as e:
+                print(e)
+                print(orig_data[idx][1], pred[idx])
+                continue
             for j in range(len(ratio)):
                 if pred_transform > buy_price * ratio[j]:
                     res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
@@ -396,10 +392,9 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    sm.set_config()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20160730)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20160730")
-    #sm.save_scaler("20120101_20160730")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170320)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170320")
+    #sm.save_scaler("20120101_20170320")
     #sm.load_scaler("20120101_20160730")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")

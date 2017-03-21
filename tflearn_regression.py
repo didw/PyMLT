@@ -150,7 +150,6 @@ class SimpleModel:
         #model = BaseModel()
         self.estimator = TensorflowRegressor(s_date)
         self.estimator.fit(X_train, Y_train)
-        del self.estimator
         print("finish training model")
 
     def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):
@@ -235,7 +234,7 @@ class SimpleModel:
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 10000
+        BUY_UNIT = 20000
         print("make buy_list")
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
@@ -245,20 +244,26 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(str(data[6].replace('A', '')))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/buy_list.txt", "wt") as f_buy:
+        with open("../data/buy_list.txt", "wt", encoding='utf-8') as f_buy:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
+                buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
+                volume = float(X_test[idx][23*29+1])
+                volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[0]
+                if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
+                    continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
                 except KeyError:
                     continue
+                print("buy_price: %d, real_buy_price: %d" % (buy_price_transform, real_buy_price))
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
                 if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
                     print("add to buy_list %s" % code_list[idx])
@@ -271,7 +276,7 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -328,7 +333,7 @@ class SimpleModel:
         pred = np.array(pred).reshape(-1)
 
         sell_item = ["매도", "", "시장가", 0, 0, "매도전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/sell_list.txt", "wt") as f_sell:
+        with open("../data/sell_list.txt", "wt", encoding='utf-8') as f_sell:
             for idx in range(len(pred)):
                 current_price = float(X_test[idx][23*29])
                 current_real_price = int(DATA[idx][3])
@@ -352,16 +357,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170320)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170320")
-    sm.save_scaler("20120101_20170320")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170320)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170320")
+    #sm.save_scaler("20120101_20170320")
     #sm.load_scaler("20120101_20160730")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    #sm.load_scaler("20120101_20170309")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170309")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170309")
+    sm.load_scaler("20120101_20170320")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170320")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20120101_20170320")
 
