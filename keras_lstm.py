@@ -173,7 +173,7 @@ class SimpleModel:
             date_min = min(date_min, date)
             date_max = max(date_max, date)
             pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
-            cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][29][0]] + [0]*22)[0]
             for j in range(len(ratio)):
                 if pred_transform > buy_price * ratio[j]:
                     res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
