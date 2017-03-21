@@ -66,7 +66,7 @@ class SimpleModel:
             len_data = len(data)
             X, Y = self.make_x_y(data, code[0])
             if len(X) <= 10: continue
-            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 1000000000: # 10억 이하면 pass
+            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
                 continue
             code_array = [code[0]] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])

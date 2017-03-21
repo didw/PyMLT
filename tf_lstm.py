@@ -60,6 +60,7 @@ class TensorflowRegressorLSTM():
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         lr = 0.0005
+        loss_sum = 0
         with tf.Session(config=config) as sess:
             sess.run(init_op)
             for i in range(self.num_epoch):
@@ -74,7 +75,8 @@ class TensorflowRegressorLSTM():
                     if j%10 == 0:
                         loss = sess.run(self.loss, feed_dict={self.lr:lr, self.inData: X_batch, self.target: Y_batch, self.batch_size: 64, self.time_length: time_length})
                         bar.numerator = j+1
-                        print("%s | loss: %f" % (bar, loss), end='\r')
+                        loss_sum = ((j/10)*loss_sum + loss)/(j/10+1)
+                        print("%s | loss: %f" % (bar, loss_sum), end='\r')
                         sys.stdout.flush()
 
             if not os.path.exists(self.model_dir):
