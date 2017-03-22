@@ -205,6 +205,7 @@ class SimpleModel:
     def load_current_data(self):
         #con = sqlite3.connect('../data/stock.db')
         #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #code_list = list(map(lambda x: x[0], code_list))
         code_list = glob.glob('../data/hdf/*.hdf')
         code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_test = []
