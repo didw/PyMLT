@@ -14,27 +14,18 @@ import tflearn
 class Simulation:
     def __init__(self):
         self.len_past = 30
-        init_op = tf.global_variables_initializer()
-        self.config = tf.ConfigProto()
-        self.config.gpu_options.allow_growth = True
-        self.init_op = tf.global_variables_initializer()
         self.s_date = "20120101_20160330"
         self.model_dir = '../model/tflearn/regression/%s/' % self.s_date
 
-        # define variable
-        self.W1 = tf.Variable(tf.random_normal([690, 200], stddev=0.35), name="W1")
-        self.b1 = tf.Variable(tf.zeros([200]), name="b1")
-        self.W2 = tf.Variable(tf.random_normal([200, 1], stddev=0.35), name="W2")
-        self.b2 = tf.Variable(tf.zeros([1]), name="b2")
-
-        # design graph
-        self.scalarInput =  tf.placeholder(shape=[None,690],dtype=tf.float32)
-        self.out1 = tf.matmul(self.scalarInput, self.W1) + self.b1
-        self.stream1 = tf.layers.dropout(tf.nn.relu(self.out1), rate=0.5)
-        #self.output = tf.layers.dense(self.stream1, 1)
-        self.output = tf.matmul(self.stream1, self.W2) + self.b2
-
-        self.saver = tf.train.Saver([self.W1, self.b1, self.W2, self.b2])
+        tf.reset_default_graph()
+        tflearn.init_graph(gpu_memory_fraction=0.1)
+        input_layer = tflearn.input_data(shape=[None, 690], name='input')
+        dense1 = tflearn.fully_connected(input_layer, 128, name='dense1', activation='relu')
+        dense2 = tflearn.fully_connected(dense1, 1, name='dense2')
+        output = tflearn.single_unit(dense2)
+        regression = tflearn.regression(output, optimizer='adam', loss='mean_square',
+                                metric='R2', learning_rate=0.001)
+        self.estimators = tflearn.DNN(regression)
 
     def load_scaler(self):
         model_name = "../model/scaler_%s.pkl" % self.s_date
@@ -81,18 +72,10 @@ class Simulation:
         assert len(data_x) == len(days)
         return data_x, days
 
-    def predict(self, X_data):
-        tf.reset_default_graph()
-        tflearn.init_graph(gpu_memory_fraction=0.1)
-        input_layer = tflearn.input_data(shape=[None, 690], name='input')
-        dense1 = tflearn.fully_connected(input_layer, 128, name='dense1', activation='relu')
-        dense2 = tflearn.fully_connected(dense1, 1, name='dense2')
-        output = tflearn.single_unit(dense2)
-        regression = tflearn.regression(output, optimizer='adam', loss='mean_square',
-                                metric='R2', learning_rate=0.001)
-        estimators = tflearn.DNN(regression)
-
+    def load_model(self):
         estimators.load('%s/model.tfl' % self.model_dir)
+
+    def predict(self, X_data):
         return estimators.predict(X_data)
 
     def simulation_daily_trade(self, code, start_date, end_date):
@@ -156,6 +139,7 @@ class Simulation:
         while begin_month <= 201701:
             self.model_dir = '../model/tflearn/regression/%d01_%d01/' % (begin_month-500, begin_month)
             print(self.model_dir)
+            self.load_model()
             begin_date = datetime.date(begin_month/100, begin_month%100, 1) - datetime.timedelta(days=40)
             end_date = datetime.date(begin_month/100, begin_month%100, 1) + datetime.timedelta(days=40)
             res += self.simulation_monthly_daily_trade(begin_date, end_date)
