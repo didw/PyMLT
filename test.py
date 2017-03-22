@@ -73,7 +73,7 @@ def convert_sql_hdf():
     for code in code_list:
         code = code[0]
         data = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자')
-        data.to_hdf('../data/stock/%s.hdf'%code, 'day', mode='w')
+        data.to_hdf('../data/hdf/%s.hdf'%code, 'day', mode='w')
 
 def read_hdf():
     code_list = glob.glob('../data/stock/*.hdf')
@@ -84,4 +84,4 @@ def read_hdf():
         print(data)
 
 if __name__ == '__main__':
-    read_hdf()
+    convert_sql_hdf()

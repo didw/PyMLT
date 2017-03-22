@@ -10,6 +10,7 @@ from etaprogress.progress import ProgressBar
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 import tflearn
+import glob
 
 
 class TensorflowRegressor():
@@ -56,8 +57,10 @@ class SimpleModel:
         self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #con = sqlite3.connect('../data/stock.db')
+        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        code_list = glob.glob('../data/hdf/*.hdf')
+        code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
         idx = 0
         split = int(len(code_list) / 9)
@@ -106,9 +109,9 @@ class SimpleModel:
         return np.array(X_data), np.array(Y_data), np.array(DATA)
 
     def load_data(self, code, begin_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
-        #df = pd.read_hdf('../data/stock/%s.h5'%code, 'table').sort_index()
+        #con = sqlite3.connect('../data/stock.db')
+        #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+        df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
         data = df.loc[df.index > str(begin_date)]
         data = data.loc[data.index < str(end_date)]
         data = data.reset_index()
@@ -200,18 +203,21 @@ class SimpleModel:
                 fout.write("%5d times trade, ratio: %1.2f, result: %10d (%6d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
-        con = sqlite3.connect('../data/stock.db')
-        code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #con = sqlite3.connect('../data/stock.db')
+        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        code_list = glob.glob('../data/hdf/*.hdf')
+        code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_test = []
         DATA = []
-        code_list = list(map(lambda x: x[0], code_list))
         first = True
         bar = ProgressBar(len(code_list), max_width=80)
-        for code in code_list:
-            bar.numerator += 1
+        #for code in code_list:
+        while bar.numerator < len(code_list):
+            code = code_list[bar.numerator]
             print("%s | %d" % (bar, len(X_test)), end='\r')
             sys.stdout.flush()
-            df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+            #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+            df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
             data = df.iloc[-30:,:]
             data = data.reset_index()
             for col in data.columns:
@@ -232,7 +238,9 @@ class SimpleModel:
                 code_list.remove(code)
                 continue
             X_test.extend(np.array(data))
-        X_test = np.array(X_test).reshape(-1, 23*30) 
+            bar.numerator += 1
+        X_test = np.array(X_test).reshape(-1, 23*30)
+        print()
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
@@ -258,7 +266,7 @@ class SimpleModel:
                 buy_price = float(X_test[idx][23*29])
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
                 volume = float(X_test[idx][23*29+1])
-                volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[0]
+                volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[1]
                 if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
                     continue
                 try:
@@ -284,7 +292,7 @@ class SimpleModel:
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
 
         # load data in DATA
-        con = sqlite3.connect('../data/stock.db')
+        #con = sqlite3.connect('../data/stock.db')
         X_test = []
         idx_rm = []
         first = True
@@ -295,7 +303,8 @@ class SimpleModel:
             sys.stdout.flush()
 
             try:
-                df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
+                #df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
+                df = pd.read_hdf('../data/hdf/%s.hdf'%code[0], 'day').sort_index()
             except pd.io.sql.DatabaseError as e:
                 print(e)
                 idx_rm.append(idx)
@@ -323,7 +332,8 @@ class SimpleModel:
             X_test.extend(np.array(data))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
-        X_test = np.array(X_test).reshape(-1, 23*30) 
+        X_test = np.array(X_test).reshape(-1, 23*30)
+        print()
         return X_test, DATA
 
     def make_sell_list(self, X_test, DATA, s_date):
@@ -353,7 +363,7 @@ class SimpleModel:
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
-        model_name = "../model/scaler_%s.pkl" % s_date
+        model_name = "../model/tflearn/regression/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
