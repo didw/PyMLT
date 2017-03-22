@@ -29,9 +29,9 @@ def simulate(bd, ed):
     test_ed = int(test_ed.strftime("%Y%m%d"))
     print("Evaluation on %d - %d" % (test_bd, test_ed))
     X_test, Y_test, Data = sm.load_all_data(test_bd, test_ed)
-    fname = "../experiments/tflearn/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
-    if not os.path.exists("../experiments/tflearn/%s/" % s_date):
-        os.makedirs("../experiments/tflearn/%s/" % s_date)
+    fname = "../experiments/tflearn/all/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
+    if not os.path.exists("../experiments/tflearn/all/%s/" % s_date):
+        os.makedirs("../experiments/tflearn/all/%s/" % s_date)
     print("Save results to %s" % fname)
     sm.evaluate_model(X_test, Y_test, Data, s_date, fname)
 

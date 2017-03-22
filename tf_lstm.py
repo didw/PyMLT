@@ -104,7 +104,7 @@ class SimpleModel:
         self.data = dict()
         self.frame_len = 30
         self.predict_dist = 5
-        self.h_size = 200
+        self.h_size = 23
         self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):

@@ -36,6 +36,8 @@ class TensorflowRegressor():
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
+        if os.path.exists('%s/model.tfl' % self.model_dir):
+            self.estimators.load('%s/model.tfl' % self.model_dir)
         self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)

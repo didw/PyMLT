@@ -154,7 +154,7 @@ class Simulation:
         begin_month = 201501
         res = 0
         while begin_month <= 201701:
-            self.model_dir = '../model/tf/regression/%d01_%d01/' % (begin_month-500, begin_month)
+            self.model_dir = '../model/tflearn/regression/%d01_%d01/' % (begin_month-500, begin_month)
             print(self.model_dir)
             begin_date = datetime.date(begin_month/100, begin_month%100, 1) - datetime.timedelta(days=40)
             end_date = datetime.date(begin_month/100, begin_month%100, 1) + datetime.timedelta(days=40)
