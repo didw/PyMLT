@@ -2,14 +2,9 @@
 from __future__ import print_function
 import pandas as pd
 import numpy as np
-import sqlite3
-from sklearn.ensemble.forest import RandomForestRegressor
-from sklearn.externals import joblib
-from sklearn.preprocessing import StandardScaler
-import os, sys
-from etaprogress.progress import ProgressBar
-from tflearn_regression import SimpleModel
+import os
 import datetime
+from tflearn_regression import SimpleModel
 from multiprocessing import Process
 
 
