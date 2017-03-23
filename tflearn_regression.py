@@ -66,14 +66,14 @@ class SimpleModel:
         split = int(len(code_list) / 9)
         bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
-            data = self.load_data(code[0], begin_date, end_date)
+            data = self.load_data(code, begin_date, end_date)
             data = data.dropna()
             len_data = len(data)
-            X, Y = self.make_x_y(data, code[0])
+            X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
             if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
                 continue
-            code_array = [code[0]] * len(X)
+            code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
@@ -268,7 +268,7 @@ class SimpleModel:
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
                 volume = float(X_test[idx][23*29+1])
                 volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[1]
-                if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
+                if volume_transform * buy_price_transform < 10: # 하루 거래량이 10억 이하이면 pass
                     continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
@@ -360,7 +360,7 @@ class SimpleModel:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
     def save_scaler(self, s_date):
-        model_name = "../model/scaler_%s.pkl" % s_date
+        model_name = "../model/tflearn/regression/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
