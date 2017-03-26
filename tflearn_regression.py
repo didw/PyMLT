@@ -20,15 +20,18 @@ class TensorflowRegressor():
         if prev_bd%100 == 0: prev_bd -= 98
         if prev_ed%100 == 0: prev_ed -= 98
         pred_s_date = "%d01_%d01" % (prev_bd, prev_ed)
-        prev_model = '../model/tflearn/regression/%s' % pred_s_date
-        self.model_dir = '../model/tflearn/regression/%s' % s_date
+        prev_model = '../model/tflearn/reg_l3_bn/%s' % pred_s_date
+        self.model_dir = '../model/tflearn/reg_l3_bn/%s' % s_date
 
         tf.reset_default_graph()
         tflearn.init_graph(gpu_memory_fraction=0.1)
         input_layer = tflearn.input_data(shape=[None, 690], name='input')
-        dense1 = tflearn.fully_connected(input_layer, 128, name='dense1', activation='relu')
-        dense2 = tflearn.fully_connected(dense1, 1, name='dense2')
-        output = tflearn.single_unit(dense2)
+        dense1 = tflearn.fully_connected(input_layer, 400, name='dense1', activation='relu')
+        dense1n = tflearn.batch_normalization(dense1, name='BN1')
+        dense2 = tflearn.fully_connected(dense1n, 100, name='dense2', activation='relu')
+        dense2n = tflearn.batch_normalization(dense2, name='BN2')
+        dense3 = tflearn.fully_connected(dense2n, 1, name='dense3')
+        output = tflearn.single_unit(dense3)
         regression = tflearn.regression(output, optimizer='adam', loss='mean_square',
                                 metric='R2', learning_rate=0.001)
         self.estimators = tflearn.DNN(regression)
@@ -39,7 +42,7 @@ class TensorflowRegressor():
         # Add an op to initialize the variables.
         if os.path.exists('%s/model.tfl' % self.model_dir):
             self.estimators.load('%s/model.tfl' % self.model_dir)
-        self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
+        self.estimators.fit(X_data, Y_data, n_epoch=50, show_metric=True, snapshot_epoch=False)
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
         self.estimators.save('%s/model.tfl' % self.model_dir)
@@ -359,27 +362,27 @@ class SimpleModel:
                     for item in sell_item:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
-    def save_scaler(self, s_date):
-        model_name = "../model/tflearn/regression/%s/scaler.pkl" % s_date
+    def save_scaler(self):
+        model_name = "%s/scaler.pkl" % self.model_dir
         joblib.dump(self.scaler, model_name)
 
-    def load_scaler(self, s_date):
-        model_name = "../model/tflearn/regression/%s/scaler.pkl" % s_date
+    def load_scaler(self):
+        model_name = "%s/scaler.pkl" % self.model_dir
         self.scaler = joblib.load(model_name)
 
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170320)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170320")
-    #sm.save_scaler("20120101_20170320")
-    #sm.load_scaler("20120101_20160730")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170326)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170326")
+    sm.save_scaler()
+    #sm.load_scaler()
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170320")
+    sm.load_scaler()
     X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170320")
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170326")
     X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170320")
+    sm.make_sell_list(X_data, data, "20120101_20170326")
 
