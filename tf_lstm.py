@@ -3,52 +3,45 @@ from __future__ import print_function
 import pandas as pd
 import numpy as np
 import sqlite3
-from sklearn.ensemble.forest import RandomForestRegressor
 from sklearn.externals import joblib
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, normalization
-from keras.wrappers.scikit_learn import KerasRegressor
-from keras.models import model_from_json
-from keras import backend as K
 from sklearn.preprocessing import StandardScaler
 import os, sys
 from etaprogress.progress import ProgressBar
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
+import glob
 
 
 class TensorflowRegressorLSTM():
-    def __init__(self, h_size, rnn_cell, s_date):
+    def __init__(self, h_size, s_date):
         #The network recieves a frame from the game, flattened into an array.
         #It then resizes it and processes it through four convolutional layers.
         # Create two variables.
         tf.reset_default_graph()
 
-        self.num_epoch = 20
+        self.num_epoch = 2
         self.lr = tf.placeholder(dtype=tf.float32)
         self.batch_size = tf.placeholder(dtype=tf.int32)
         self.time_length = tf.placeholder(dtype=tf.int32)
 
         self.inData =  tf.placeholder(shape=[None, None,23],dtype=tf.float32)
-        self.inReshaped = tf.reshape(self.inData,[self.batch_size, self.time_length,23])
-        self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
+        inReshaped = tf.reshape(self.inData,[self.batch_size, self.time_length,23])
 
-        self.W1 = tf.Variable(tf.random_normal([h_size,1]))
-        self.b1 = tf.Variable(tf.random_normal([1]))
+        W1 = tf.Variable(tf.random_normal([h_size,1]))
+        b1 = tf.Variable(tf.random_normal([1]))
 
-        self.rnn,self.rnn_state = tf.nn.dynamic_rnn(\
-                inputs=self.inReshaped,cell=rnn_cell,dtype=tf.float32,initial_state=self.state_in)
-        self.rnn = tf.reshape(self.rnn, shape=[-1, h_size])
-        self.output = tf.matmul(self.rnn, self.W1) + self.b1
-        self.output_last = tf.reshape(self.output, [self.batch_size, 30])[:,29]
+        lstm_cell = tf.contrib.rnn.BasicLSTMCell(h_size)
+        init_state = lstm_cell.zero_state(self.batch_size, dtype=tf.float32)
+        outputs, states = tf.nn.dynamic_rnn(\
+                lstm_cell, inReshaped, dtype=tf.float32,initial_state=init_state)
+        self.pred = tf.matmul(outputs[:,-1], W1) + b1
         
         #Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
         self.target = tf.placeholder(shape=[None],dtype=tf.float32)
-        self.error = tf.square(self.target - self.output)
-        self.loss = tf.reduce_mean(self.error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
-        self.updateModel = self.trainer.minimize(self.loss)
-        self.saver = tf.train.Saver()
+        error = tf.square(self.target - self.pred)
+        self.loss = tf.reduce_mean(error)
+        trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        self.updateModel = trainer.minimize(self.loss)
         self.model_dir = '../model/tf/lstm/%s/' % s_date
 
     def fit(self, X_data, Y_data):
@@ -81,7 +74,8 @@ class TensorflowRegressorLSTM():
 
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
-            save_path = self.saver.save(sess,'%s/model.ckpt' % self.model_dir)
+            saver = tf.train.Saver()
+            save_path = saver.save(sess,'%s/model.ckpt' % self.model_dir)
             print("Model saved in file: %s" % save_path)
 
     def predict(self, X_data):
@@ -93,13 +87,14 @@ class TensorflowRegressorLSTM():
         with tf.Session(config=config) as sess:
             sess.run(init_op)
             ckpt = tf.train.get_checkpoint_state(self.model_dir)
-            self.saver.restore(sess, ckpt.model_checkpoint_path)
+            saver = tf.train.Saver()
+            saver.restore(sess, ckpt.model_checkpoint_path)
             X_data = X_data.reshape(-1, time_length, 23)
             batch_size = len(X_data)
-            return sess.run(self.output_last, feed_dict={self.inData: X_data, self.batch_size: batch_size, self.time_length: time_length})
+            return sess.run(self.pred, feed_dict={self.inData: X_data, self.batch_size: batch_size, self.time_length: time_length})
 
 
-class SimpleModel:
+class LstmModel:
     def __init__(self):
         self.data = dict()
         self.frame_len = 30
@@ -108,19 +103,24 @@ class SimpleModel:
         self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #con = sqlite3.connect('../data/stock.db')
+        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        code_list = glob.glob('../data/hdf/*.hdf')
+        code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
         idx = 0
         split = int(len(code_list) / 9)
         bar = ProgressBar(len(code_list), max_width=80)
-        for code in code_list:
-            data = self.load_data(code[0], begin_date, end_date)
+        for code in code_list[:100]:
+            data = self.load_data(code, begin_date, end_date)
             data = data.dropna()
-            X, Y = self.make_x_y(data, code[0])
-            if len(X) <= 1: continue
-            code_array = [code[0]] * len(X)
-            assert len(X) == len(data.loc[29:len(data)-6, '일자'])
+            len_data = len(data)
+            X, Y = self.make_x_y(data, code)
+            if len(X) <= 10: continue
+            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
+                continue
+            code_array = [code] * len(X)
+            assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
@@ -155,8 +155,9 @@ class SimpleModel:
         return np.array(X_data), np.array(Y_data), np.array(DATA)
 
     def load_data(self, code, begin_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+        #con = sqlite3.connect('../data/stock.db')
+        #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+        df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
         data = df.loc[df.index > str(begin_date)]
         data = data.loc[data.index < str(end_date)]
         data = data.reset_index()
@@ -195,26 +196,16 @@ class SimpleModel:
         np_y = np.array(data_y)
         return np_x, np_y
 
-    def set_config(self):
-        #Tensorflow GPU optimization
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        K.set_session(sess)
-
     def train_model_tensorflow(self, X_train, Y_train, s_date):
         print("training model %s model.cptk" % s_date)
         #model = BaseModel()
-        cell = tf.contrib.rnn.LSTMCell(num_units=self.h_size,state_is_tuple=True)
-        self.estimator = TensorflowRegressorLSTM(self.h_size, cell, s_date)
+        self.estimator = TensorflowRegressorLSTM(self.h_size, s_date)
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
 
     def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):
         print("Evaluate model test.ckpt")
-        h_size = 200
-        cell = tf.contrib.rnn.LSTMCell(num_units=h_size,state_is_tuple=True)
-        self.estimator = TensorflowRegressorLSTM(h_size, cell, s_date)
+        self.estimator = TensorflowRegressorLSTM(self.h_size, s_date)
         pred = self.estimator.predict(X_test)
         score = 0
         ratio = [1, 1.01, 1.02, 1.05, 1.1, 1.5, 2, 2.5, 3]
@@ -234,8 +225,13 @@ class SimpleModel:
             date = int(orig_data[idx][0])
             date_min = min(date_min, date)
             date_max = max(date_max, date)
-            pred_transform = self.scaler[orig_data[idx][1]].inverse_transform([pred[idx]] + [0]*22)[0]
-            cur_transform = self.scaler[orig_data[idx][1]].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            try:
+                pred_transform = self.scaler[str(orig_data[idx][1])].inverse_transform([pred[idx]] + [0]*22)[0]
+                cur_transform = self.scaler[str(orig_data[idx][1])].inverse_transform([X_test[idx][23*29]] + [0]*22)[0]
+            except (KeyError, ValueError) as e:
+                print(e)
+                print(orig_data[idx][1], pred[idx])
+                continue
             for j in range(len(ratio)):
                 if pred_transform > buy_price * ratio[j]:
                     res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
@@ -253,18 +249,22 @@ class SimpleModel:
                 fout.write("%5d times trade, ratio: %1.2f, result: %8d (%4d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
-        con = sqlite3.connect('../data/stock.db')
-        code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #con = sqlite3.connect('../data/stock.db')
+        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        #code_list = list(map(lambda x: x[0], code_list))
+        code_list = glob.glob('../data/hdf/*.hdf')
+        code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_test = []
         DATA = []
-        code_list = list(map(lambda x: x[0], code_list))
         first = True
         bar = ProgressBar(len(code_list), max_width=80)
-        for code in code_list:
-            bar.numerator += 1
+        #for code in code_list:
+        while bar.numerator < len(code_list):
+            code = code_list[bar.numerator]
             print("%s | %d" % (bar, len(X_test)), end='\r')
             sys.stdout.flush()
-            df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+            #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
+            df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
             data = df.iloc[-30:,:]
             data = data.reset_index()
             for col in data.columns:
@@ -285,11 +285,13 @@ class SimpleModel:
                 code_list.remove(code)
                 continue
             X_test.extend(np.array(data))
-        X_test = np.array(X_test).reshape(-1, 23*30) 
+            bar.numerator += 1
+        X_test = np.array(X_test).reshape(-1, 23*30)
+        print()
         return X_test, code_list, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 10000
+        BUY_UNIT = 20000
         print("make buy_list")
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
@@ -299,20 +301,26 @@ class SimpleModel:
 
         # load code list from account
         set_account = set([])
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(str(data[6].replace('A', '')))
 
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/buy_list.txt", "wt") as f_buy:
+        with open("../data/buy_list.txt", "wt", encoding='utf-8') as f_buy:
             for idx in range(len(pred)):
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
+                buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
+                volume = float(X_test[idx][23*29+1])
+                volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[1]
+                if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
+                    continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
                 except KeyError:
                     continue
+                print("buy_price: %d, real_buy_price: %d" % (buy_price_transform, real_buy_price))
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
                 if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
                     print("add to buy_list %s" % code_list[idx])
@@ -325,13 +333,13 @@ class SimpleModel:
     def load_data_in_account(self):
         # load code list from account
         DATA = []
-        with open('../data/stocks_in_account.txt') as f_stocks:
+        with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
 
         # load data in DATA
-        con = sqlite3.connect('../data/stock.db')
+        #con = sqlite3.connect('../data/stock.db')
         X_test = []
         idx_rm = []
         first = True
@@ -342,7 +350,8 @@ class SimpleModel:
             sys.stdout.flush()
 
             try:
-                df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
+                #df = pd.read_sql("SELECT * from '%s'" % code[0], con, index_col='일자').sort_index()
+                df = pd.read_hdf('../data/hdf/%s.hdf'%code[0], 'day').sort_index()
             except pd.io.sql.DatabaseError as e:
                 print(e)
                 idx_rm.append(idx)
@@ -370,7 +379,8 @@ class SimpleModel:
             X_test.extend(np.array(data))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
-        X_test = np.array(X_test).reshape(-1, 23*30) 
+        X_test = np.array(X_test).reshape(-1, 23*30)
+        print()
         return X_test, DATA
 
     def make_sell_list(self, X_test, DATA, s_date):
@@ -382,7 +392,7 @@ class SimpleModel:
         pred = np.array(pred).reshape(-1)
 
         sell_item = ["매도", "", "시장가", 0, 0, "매도전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
-        with open("../data/sell_list.txt", "wt") as f_sell:
+        with open("../data/sell_list.txt", "wt", encoding='utf-8') as f_sell:
             for idx in range(len(pred)):
                 current_price = float(X_test[idx][23*29])
                 current_real_price = int(DATA[idx][3])
@@ -396,16 +406,16 @@ class SimpleModel:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
     def save_scaler(self, s_date):
-        model_name = "../model/scaler_%s.pkl" % s_date
+        model_name = "../model/tf/lstm/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
-        model_name = "../model/scaler_%s.pkl" % s_date
+        model_name = "../model/tf/lstm/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
 if __name__ == '__main__':
-    sm = SimpleModel()
+    sm = LstmModel()
     sm.set_config()
     X_train, Y_train, _ = sm.load_all_data(20120101, 20160330)
     sm.train_model_tensorflow(X_train, Y_train, "20120101_20160330")
