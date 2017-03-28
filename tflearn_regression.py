@@ -74,7 +74,8 @@ class SimpleModel:
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
+            mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
+            if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
@@ -362,12 +363,12 @@ class SimpleModel:
                     for item in sell_item:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
-    def save_scaler(self):
-        model_name = "%s/scaler.pkl" % self.model_dir
+    def save_scaler(self, s_date):
+        model_name = "../model/tflearn/reg_l3_bn/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
-    def load_scaler(self):
-        model_name = "%s/scaler.pkl" % self.model_dir
+    def load_scaler(self, s_date):
+        model_name = "../model/tflearn/reg_l3_bn/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
@@ -375,8 +376,8 @@ if __name__ == '__main__':
     sm = SimpleModel()
     X_train, Y_train, _ = sm.load_all_data(20120101, 20170326)
     sm.train_model_tensorflow(X_train, Y_train, "20120101_20170326")
-    sm.save_scaler()
-    #sm.load_scaler()
+    sm.save_scaler("20120101_20170326")
+    #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 

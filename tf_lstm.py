@@ -14,6 +14,13 @@ import glob
 
 class TensorflowRegressorLSTM():
     def __init__(self, h_size, s_date):
+        prev_bd = int(s_date[:6])-1
+        prev_ed = int(s_date[9:15])-1
+        if prev_bd%100 == 0: prev_bd -= 98
+        if prev_ed%100 == 0: prev_ed -= 98
+        pred_s_date = "%d01_%d01" % (prev_bd, prev_ed)
+        self.prev_model = '../model/tf/lstm/%s' % pred_s_date
+        self.model_dir = '../model/tf/lstm/%s' % s_date
         #The network recieves a frame from the game, flattened into an array.
         #It then resizes it and processes it through four convolutional layers.
         # Create two variables.
@@ -42,7 +49,6 @@ class TensorflowRegressorLSTM():
         self.loss = tf.reduce_mean(error)
         trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
         self.updateModel = trainer.minimize(self.loss)
-        self.model_dir = '../model/tf/lstm/%s/' % s_date
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
@@ -56,6 +62,10 @@ class TensorflowRegressorLSTM():
         loss_sum = 0
         with tf.Session(config=config) as sess:
             sess.run(init_op)
+            if os.path.exists('%s/model.ckpt.meta' % self.prev_model):
+                ckpt = tf.train.get_checkpoint_state(self.prev_model)
+                saver = tf.train.Saver()
+                saver.restore(sess, ckpt.model_checkpoint_path)
             for i in range(self.num_epoch):
                 lr *= 0.9
                 print("\nEpoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
@@ -111,13 +121,14 @@ class LstmModel:
         idx = 0
         split = int(len(code_list) / 9)
         bar = ProgressBar(len(code_list), max_width=80)
-        for code in code_list[:100]:
+        for code in code_list:
             data = self.load_data(code, begin_date, end_date)
             data = data.dropna()
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
+            mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
+            if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
@@ -240,13 +251,13 @@ class LstmModel:
         print("date length: %d - %d (%d)" % (date_min, date_max, int(len(pred)/2500)))
         for i in range(len(res)):
             if freq[i] == 0: continue
-            print("%5d times trade, ratio: %1.2f, result: %8d (%4d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+            print("%5d times trade, ratio: %1.2f, result: %10d (%6d)" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
         if fname is not None:
             fout = open(fname, 'wt')
             fout.write("date length: %d - %d (%d)\n" % (date_min, date_max, int(len(pred)/2500)))
             for i in range(len(res)):
                 if freq[i] == 0: continue
-                fout.write("%5d times trade, ratio: %1.2f, result: %8d (%4d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
+                fout.write("%5d times trade, ratio: %1.2f, result: %10d (%6d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
         #con = sqlite3.connect('../data/stock.db')
@@ -416,7 +427,6 @@ class LstmModel:
 
 if __name__ == '__main__':
     sm = LstmModel()
-    sm.set_config()
     X_train, Y_train, _ = sm.load_all_data(20120101, 20160330)
     sm.train_model_tensorflow(X_train, Y_train, "20120101_20160330")
     sm.save_scaler("20120101_20160330")

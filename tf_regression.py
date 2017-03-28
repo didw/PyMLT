@@ -14,6 +14,13 @@ import glob
 
 class TensorflowRegressor():
     def __init__(self, s_date):
+        prev_bd = int(s_date[:6])-1
+        prev_ed = int(s_date[9:15])-1
+        if prev_bd%100 == 0: prev_bd -= 98
+        if prev_ed%100 == 0: prev_ed -= 98
+        pred_s_date = "%d01_%d01" % (prev_bd, prev_ed)
+        self.prev_model = '../model/tensorflow/regression/small/%s' % pred_s_date
+        self.model_dir = '../model/tensorflow/regression/small/%s' % s_date
         #The network recieves a frame from the game, flattened into an array.
         #It then resizes it and processes it through four convolutional layers.
         # Create two variables.
@@ -33,12 +40,10 @@ class TensorflowRegressor():
         
         #Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
         self.target = tf.placeholder(shape=[None],dtype=tf.float32)
-        self.error = tf.square(self.target - self.output)
-        self.loss = tf.reduce_mean(self.error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
-        self.updateModel = self.trainer.minimize(self.loss)
-        self.saver = tf.train.Saver([self.W1, self.b1, self.W2, self.b2])
-        self.model_dir = '../model/tf/regression/%s/' % s_date
+        error = tf.square(self.target - self.output)
+        self.loss = tf.reduce_mean(error)
+        trainer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        self.updateModel = trainer.minimize(self.loss)
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
@@ -48,6 +53,7 @@ class TensorflowRegressor():
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         lr = 0.0005
+        loss_sum = 0
         with tf.Session(config=config) as sess:
             sess.run(init_op)
             for i in range(self.num_epoch):
@@ -55,19 +61,21 @@ class TensorflowRegressor():
                 print("\nEpoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
                 for j in range(int(len(X_data)/batch_size)-1):
-                    X_batch = X_data[batch_size*j:batch_size*(j+1)]
+                    X_batch = X_data[batch_size*j:batch_size*(j+1)].reshape(batch_size, time_length, 23)
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
                     _ = sess.run(self.updateModel, feed_dict={self.lr:lr, self.scalarInput: X_batch, self.target: Y_batch})
 
                     if j%10 == 0:
                         loss = sess.run(self.loss, feed_dict={self.lr:lr, self.scalarInput: X_batch, self.target: Y_batch})
                         bar.numerator = j+1
-                        print("%s | loss: %f" % (bar, loss), end='\r')
+                        loss_sum = ((j/10)*loss_sum + loss)/(j/10+1)
+                        print("%s | loss: %f" % (bar, loss_sum), end='\r')
                         sys.stdout.flush()
 
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
-            save_path = self.saver.save(sess,'%s/model.ckpt' % self.model_dir)
+            saver = tf.train.Saver()
+            save_path = saver.save(sess,'%s/model.ckpt' % self.model_dir)
             print("Model saved in file: %s" % save_path)
 
     def predict(self, X_data):
@@ -77,7 +85,8 @@ class TensorflowRegressor():
         with tf.Session(config=config) as sess:
             sess.run(init_op)
             ckpt = tf.train.get_checkpoint_state(self.model_dir)
-            self.saver.restore(sess, ckpt.model_checkpoint_path)
+            saver = tf.train.Saver()
+            saver.restore(sess, ckpt.model_checkpoint_path)
             return sess.run(self.output, feed_dict={self.scalarInput: X_data})
 
 
@@ -103,7 +112,9 @@ class SimpleModel:
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            if int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean()) < 10: # 10억 이하면 pass
+            mean_velocity = int(pd.to_numeric(data.loc[len_data-10:len_data,'현재가']).mean()) * int(pd.to_numeric(data.loc[len_data-10:len_data, '거래량']).mean())
+            #print("mean velocity: %d" % mean_velocity)
+            if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
@@ -392,11 +403,11 @@ class SimpleModel:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
     def save_scaler(self, s_date):
-        model_name = "../model/tf/regression/%s/scaler.pkl" % s_date
+        model_name = "../model/tensorflow/regression/small/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
-        model_name = "../model/tf/regression/%s/scaler.pkl" % s_date
+        model_name = "../model/tensorflow/regression/small/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
