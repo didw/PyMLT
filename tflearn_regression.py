@@ -74,9 +74,9 @@ class SimpleModel:
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
-            if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
-                continue
+            #mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
+            #if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
+            #    continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
@@ -207,9 +207,6 @@ class SimpleModel:
                 fout.write("%5d times trade, ratio: %1.2f, result: %10d (%6d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
-        #con = sqlite3.connect('../data/stock.db')
-        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        #code_list = list(map(lambda x: x[0], code_list))
         code_list = glob.glob('../data/hdf/*.hdf')
         code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_test = []
@@ -217,13 +214,15 @@ class SimpleModel:
         first = True
         bar = ProgressBar(len(code_list), max_width=80)
         #for code in code_list:
-        while bar.numerator < len(code_list):
-            code = code_list[bar.numerator]
+        code_list_ret = []
+        for i, code in enumerate(code_list):
+            bar.numerator = i+1
             print("%s | %d" % (bar, len(X_test)), end='\r')
             sys.stdout.flush()
-            #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
             df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
             data = df.iloc[-30:,:]
+            if pd.to_numeric(data.loc[:, '현재가']).mean() * pd.to_numeric(data.loc[:, '거래량']).mean() < 10000000:
+                continue
             data = data.reset_index()
             for col in data.columns:
                 try:
@@ -234,23 +233,25 @@ class SimpleModel:
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
-                code_list.remove(code)
                 continue
             DATA.append(int(data.loc[len(data)-1, '현재가']))
             try:
                 data = self.scaler[code].transform(np.array(data))
             except KeyError:
-                code_list.remove(code)
                 continue
+            code_list_ret.append(code)
             X_test.extend(np.array(data))
-            bar.numerator += 1
         X_test = np.array(X_test).reshape(-1, 23*30)
         print()
-        return X_test, code_list, DATA
+        assert len(X_test) == len(code_list_ret)
+        assert len(X_test) == len(DATA)
+        return X_test, code_list_ret, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 20000
+        BUY_UNIT = 1000000
         print("make buy_list")
+        assert len(X_test) == len(code_list)
+        assert len(X_test) == len(orig_data)
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
@@ -272,7 +273,7 @@ class SimpleModel:
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
                 volume = float(X_test[idx][23*29+1])
                 volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[1]
-                if volume_transform * buy_price_transform < 10: # 하루 거래량이 10억 이하이면 pass
+                if volume_transform * buy_price_transform < 10000000: # 하루 거래량이 10억 이하이면 pass
                     continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
@@ -374,14 +375,14 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170326)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170326")
-    sm.save_scaler("20120101_20170326")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170326)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170326")
+    #sm.save_scaler("20120101_20170326")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler()
+    sm.load_scaler("20120101_20170326")
     X_data, code_list, data = sm.load_current_data()
     sm.make_buy_list(X_data, code_list, data, "20120101_20170326")
     X_data, data = sm.load_data_in_account()
