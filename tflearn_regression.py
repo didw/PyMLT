@@ -124,14 +124,14 @@ class SimpleModel:
     def make_x_y(self, data, code):
         data_x = []
         data_y = []
-        for col in data.columns:
-            try:
-                data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-                data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-            except AttributeError as e:
-                pass
-                print(e)
-        data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
+        #for col in data.columns:
+        #    try:
+        #        data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
+        #        data.loc[:, col] = data.loc[:, col].str.replace('+', '')
+        #    except AttributeError as e:
+        #        pass
+        #        print(e)
+        data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
         data = data.drop(['일자', '체결강도'], axis=1)
 
         # normalization
@@ -230,7 +230,7 @@ class SimpleModel:
                     data.loc[:, col] = data.loc[:, col].str.replace('+', '')
                 except AttributeError as e:
                     pass
-            data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
+            data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
                 continue
@@ -317,16 +317,17 @@ class SimpleModel:
                 continue
             data = df.iloc[-30:,:]
             data = data.reset_index()
-            for col in data.columns:
-                try:
-                    data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-                    data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-                except AttributeError as e:
-                    pass
-                    print(e)
-            data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
+            #for col in data.columns:
+            #    try:
+            #        data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
+            #        data.loc[:, col] = data.loc[:, col].str.replace('+', '')
+            #    except AttributeError as e:
+            #        pass
+            #        print(e)
+            data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
             DATA[idx].append(int(data.loc[len(data)-1, '현재가']))
             data = data.drop(['일자', '체결강도'], axis=1)
+            #print(data.head())
             if len(data) < 30:
                 idx_rm.append(idx)
                 continue
