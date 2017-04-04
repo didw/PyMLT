@@ -76,12 +76,12 @@ def convert_sql_hdf():
         data.to_hdf('../data/hdf/%s.hdf'%code, 'day', mode='w')
 
 def read_hdf():
-    code_list = glob.glob('../data/stock/*.hdf')
+    code_list = glob.glob('../data/hdf/*.hdf')
     for code in code_list[:10]:
         data = pd.read_hdf(code, 'day').sort_index()
-        data = data.loc[data.index >= str(20160101)]
-        data = data.loc[data.index <= str(20160630)]
+        data = data.loc[data.index >= 20160101]
+        data = data.loc[data.index <= 20160630]
         print(data)
 
 if __name__ == '__main__':
-    convert_sql_hdf()
+    read_hdf()

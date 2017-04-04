@@ -20,8 +20,8 @@ class TensorflowRegressor():
         if prev_bd%100 == 0: prev_bd -= 98
         if prev_ed%100 == 0: prev_ed -= 98
         pred_s_date = "%d01_%d01" % (prev_bd, prev_ed)
-        prev_model = '../model/tflearn/reg_l3_bn/%s' % pred_s_date
-        self.model_dir = '../model/tflearn/reg_l3_bn/%s' % s_date
+        prev_model = '../model/tflearn/reg_l3_bn/big/%s' % pred_s_date
+        self.model_dir = '../model/tflearn/reg_l3_bn/big/%s' % s_date
 
         tf.reset_default_graph()
         tflearn.init_graph(gpu_memory_fraction=0.1)
@@ -37,14 +37,14 @@ class TensorflowRegressor():
         self.estimators = tflearn.DNN(regression)
         if os.path.exists('%s/model.tfl' % prev_model):
             self.estimators.load('%s/model.tfl' % prev_model)
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
 
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
         if os.path.exists('%s/model.tfl' % self.model_dir):
             self.estimators.load('%s/model.tfl' % self.model_dir)
-        self.estimators.fit(X_data, Y_data, n_epoch=50, show_metric=True, snapshot_epoch=False)
-        if not os.path.exists(self.model_dir):
-            os.makedirs(self.model_dir)
+        self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
         self.estimators.save('%s/model.tfl' % self.model_dir)
 
     def predict(self, X_data):
@@ -70,23 +70,26 @@ class SimpleModel:
         bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
             data = self.load_data(code, begin_date, end_date)
+            if data is None or len(data) == 0:
+                continue
             data = data.dropna()
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            #mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
-            #if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
-            #    continue
+            mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
+            #print("mean velocity: %d" % mean_velocity)
+            if mean_velocity < 1000000000: # 10억 이하면 pass
+                continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist()
+                DATA_list[int(idx/split)] = np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist()
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist())
+                DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist())
             bar.numerator += 1
             print("%s | %d" % (bar, len(X_data_list[int(idx/split)])), end='\r')
             sys.stdout.flush()
@@ -116,21 +119,14 @@ class SimpleModel:
         #con = sqlite3.connect('../data/stock.db')
         #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
         df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
-        data = df.loc[df.index > str(begin_date)]
-        data = data.loc[data.index < str(end_date)]
+        data = df.loc[df.index > begin_date]
+        data = data.loc[data.index < end_date]
         data = data.reset_index()
         return data
 
     def make_x_y(self, data, code):
         data_x = []
         data_y = []
-        #for col in data.columns:
-        #    try:
-        #        data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-        #        data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-        #    except AttributeError as e:
-        #        pass
-        #        print(e)
         data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
         data = data.drop(['일자', '체결강도'], axis=1)
 
@@ -157,6 +153,9 @@ class SimpleModel:
     def train_model_tensorflow(self, X_train, Y_train, s_date):
         print("training model %s model.cptk" % s_date)
         #model = BaseModel()
+        #p = np.random.permutation(len(X_train))
+        #X_train = X_train[p]
+        #Y_train = Y_train[p]
         self.estimator = TensorflowRegressor(s_date)
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
@@ -178,7 +177,8 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            buy_price = int(orig_data[idx][2])
+            cur_price = int(orig_data[idx][2])
+            buy_price = int(orig_data[idx][4])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
             date_min = min(date_min, date)
@@ -191,10 +191,10 @@ class SimpleModel:
                 print(orig_data[idx][1], pred[idx])
                 continue
             for j in range(len(ratio)):
-                if pred_transform > buy_price * ratio[j]:
-                    res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
+                if pred_transform > cur_price * ratio[j]:
+                    res[j] += (future_price - buy_price*1.005)*(1000000/buy_price+1)
                     freq[j] += 1
-                    print("[%s, %d] buy: %6d, sell: %6d, earn: %6d" % (str(date), freq[j], buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
+                    print("[%s, %d] buy: %6d, sell: %6d, earn: %6d" % (str(date), freq[j], buy_price, future_price, (future_price - buy_price*1.005)*(1000000/buy_price)))
         print("date length: %d - %d (%d)" % (date_min, date_max, int(len(pred)/2500)))
         for i in range(len(res)):
             if freq[i] == 0: continue
@@ -221,7 +221,7 @@ class SimpleModel:
             sys.stdout.flush()
             df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
             data = df.iloc[-30:,:]
-            if pd.to_numeric(data.loc[:, '현재가']).mean() * pd.to_numeric(data.loc[:, '거래량']).mean() < 10000000:
+            if pd.to_numeric(data.loc[:, '현재가']).mean() * pd.to_numeric(data.loc[:, '거래량']).mean() < 1000000000:
                 continue
             data = data.reset_index()
             for col in data.columns:
@@ -273,7 +273,7 @@ class SimpleModel:
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
                 volume = float(X_test[idx][23*29+1])
                 volume_transform = self.scaler[code_list[idx]].inverse_transform([0]*1 + [buy_price] + [0]*21)[1]
-                if volume_transform * buy_price_transform < 10000000: # 하루 거래량이 10억 이하이면 pass
+                if volume_transform * buy_price_transform < 1000000000: # 하루 거래량이 10억 이하이면 pass
                     continue
                 try:
                     pred_transform = self.scaler[code_list[idx]].inverse_transform([pred[idx]] + [0]*22)[0]
@@ -317,17 +317,9 @@ class SimpleModel:
                 continue
             data = df.iloc[-30:,:]
             data = data.reset_index()
-            #for col in data.columns:
-            #    try:
-            #        data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-            #        data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-            #    except AttributeError as e:
-            #        pass
-            #        print(e)
             data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
             DATA[idx].append(int(data.loc[len(data)-1, '현재가']))
             data = data.drop(['일자', '체결강도'], axis=1)
-            #print(data.head())
             if len(data) < 30:
                 idx_rm.append(idx)
                 continue
@@ -366,26 +358,26 @@ class SimpleModel:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
     def save_scaler(self, s_date):
-        model_name = "../model/tflearn/reg_l3_bn/%s/scaler.pkl" % s_date
+        model_name = "../model/tflearn/reg_l3_bn/big/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
-        model_name = "../model/tflearn/reg_l3_bn/%s/scaler.pkl" % s_date
+        model_name = "../model/tflearn/reg_l3_bn/big/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170326)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170326")
-    #sm.save_scaler("20120101_20170326")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170401)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170401")
+    sm.save_scaler("20120101_20170401")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170326")
-    X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170326")
-    X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170326")
+    #sm.load_scaler("20120101_20170326")
+    #X_data, code_list, data = sm.load_current_data()
+    #sm.make_buy_list(X_data, code_list, data, "20120101_20170326")
+    #X_data, data = sm.load_data_in_account()
+    #sm.make_sell_list(X_data, data, "20120101_20170326")
 

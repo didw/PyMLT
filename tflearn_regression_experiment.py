@@ -22,15 +22,15 @@ def simulate(bd, ed):
     test_ed = int(test_ed.strftime("%Y%m%d"))
     print("Evaluation on %d - %d" % (test_bd, test_ed))
     X_test, Y_test, Data = sm.load_all_data(test_bd, test_ed)
-    fname = "../experiments/tflearn/all/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
-    if not os.path.exists("../experiments/tflearn/all/%s/" % s_date):
-        os.makedirs("../experiments/tflearn/all/%s/" % s_date)
+    fname = "../experiments/tflearn/reg_l3_bn/big/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
+    if not os.path.exists("../experiments/tflearn/reg_l3_bn/big/%s/" % s_date):
+        os.makedirs("../experiments/tflearn/reg_l3_bn/big/%s/" % s_date)
     print("Save results to %s" % fname)
     sm.evaluate_model(X_test, Y_test, Data, s_date, fname)
 
 
 def simulate_all():
-    base_month = 201501
+    base_month = 201512
     while base_month <= 201701:
         end_date = datetime.date(int(base_month/100), base_month%100, 1)
         begin_date = datetime.date(int(base_month/100)-5, base_month%100, 1)

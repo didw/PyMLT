@@ -22,9 +22,9 @@ def simulate(bd, ed):
     test_ed = int(test_ed.strftime("%Y%m%d"))
     print("Evaluation on %d - %d" % (test_bd, test_ed))
     X_test, Y_test, Data = sm.load_all_data(test_bd, test_ed)
-    fname = "../experiments/tensorflow/small/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
-    if not os.path.exists("../experiments/tensorflow/small/%s/" % s_date):
-        os.makedirs("../experiments/tensorflow/small/%s/" % s_date)
+    fname = "../experiments/tensorflow/big/%s/%d_%d.txt" % (s_date, test_bd, test_ed)
+    if not os.path.exists("../experiments/tensorflow/big/%s/" % s_date):
+        os.makedirs("../experiments/tensorflow/big/%s/" % s_date)
     print("Save results to %s" % fname)
     sm.evaluate_model(X_test, Y_test, Data, s_date, fname)
 

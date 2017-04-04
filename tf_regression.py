@@ -19,8 +19,8 @@ class TensorflowRegressor():
         if prev_bd%100 == 0: prev_bd -= 98
         if prev_ed%100 == 0: prev_ed -= 98
         pred_s_date = "%d01_%d01" % (prev_bd, prev_ed)
-        self.prev_model = '../model/tensorflow/regression/small/%s' % pred_s_date
-        self.model_dir = '../model/tensorflow/regression/small/%s' % s_date
+        self.prev_model = '../model/tensorflow/regression/big/%s' % pred_s_date
+        self.model_dir = '../model/tensorflow/regression/big/%s' % s_date
         #The network recieves a frame from the game, flattened into an array.
         #It then resizes it and processes it through four convolutional layers.
         # Create two variables.
@@ -48,20 +48,24 @@ class TensorflowRegressor():
     def fit(self, X_data, Y_data):
         # Add an op to initialize the variables.
         init_op = tf.global_variables_initializer()
-        batch_size = 64
+        batch_size = 128
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
-        lr = 0.0005
+        lr = 0.005
         loss_sum = 0
         with tf.Session(config=config) as sess:
             sess.run(init_op)
+            if os.path.exists('%s/model.ckpt.meta'):
+                ckpt = tf.train.get_checkpoint_state(self.model_dir)
+                saver = tf.train.Saver()
+                saver.restore(sess, ckpt.model_checkpoint_path)
             for i in range(self.num_epoch):
                 lr *= 0.9
                 print("\nEpoch %d/%d is started" % (i+1, self.num_epoch), end='\n')
                 bar = ProgressBar(len(X_data)/batch_size, max_width=80)
                 for j in range(int(len(X_data)/batch_size)-1):
-                    X_batch = X_data[batch_size*j:batch_size*(j+1)].reshape(batch_size, time_length, 23)
+                    X_batch = X_data[batch_size*j:batch_size*(j+1)]
                     Y_batch = Y_data[batch_size*j:batch_size*(j+1)]
                     _ = sess.run(self.updateModel, feed_dict={self.lr:lr, self.scalarInput: X_batch, self.target: Y_batch})
 
@@ -108,24 +112,26 @@ class SimpleModel:
         bar = ProgressBar(len(code_list), max_width=80)
         for code in code_list:
             data = self.load_data(code, begin_date, end_date)
+            if data is None or len(data) == 0:
+                continue
             data = data.dropna()
             len_data = len(data)
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
-            mean_velocity = int(pd.to_numeric(data.loc[len_data-10:len_data,'현재가']).mean()) * int(pd.to_numeric(data.loc[len_data-10:len_data, '거래량']).mean())
+            mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
             #print("mean velocity: %d" % mean_velocity)
-            if mean_velocity > 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
+            if mean_velocity < 1000000000 or mean_velocity < 10000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
             assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist()
+                DATA_list[int(idx/split)] = np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist()
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가']]).T.tolist())
+                DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist())
             bar.numerator += 1
             print("%s | %d" % (bar, len(X_data_list[int(idx/split)])), end='\r')
             sys.stdout.flush()
@@ -155,22 +161,15 @@ class SimpleModel:
         #con = sqlite3.connect('../data/stock.db')
         #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
         df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
-        data = df.loc[df.index > str(begin_date)]
-        data = data.loc[data.index < str(end_date)]
+        data = df.loc[df.index > begin_date]
+        data = data.loc[data.index < end_date]
         data = data.reset_index()
         return data
 
     def make_x_y(self, data, code):
         data_x = []
         data_y = []
-        for col in data.columns:
-            try:
-                data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-                data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-            except AttributeError as e:
-                pass
-                print(e)
-        data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
+        data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
         data = data.drop(['일자', '체결강도'], axis=1)
 
         # normalization
@@ -196,6 +195,9 @@ class SimpleModel:
     def train_model_tensorflow(self, X_train, Y_train, s_date):
         print("training model %s model.cptk" % s_date)
         #model = BaseModel()
+        #p = np.random.permutation(len(X_train))
+        #X_train = X_train[p]
+        #Y_train = Y_train[p]
         self.estimator = TensorflowRegressor(s_date)
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
@@ -217,7 +219,8 @@ class SimpleModel:
         score = np.sqrt(score/len(pred))
         print("score: %f" % score)
         for idx in range(len(pred)):
-            buy_price = int(orig_data[idx][2])
+            cur_price = int(orig_data[idx][2])
+            buy_price = int(orig_data[idx][4])
             future_price = int(orig_data[idx][3])
             date = int(orig_data[idx][0])
             date_min = min(date_min, date)
@@ -230,7 +233,7 @@ class SimpleModel:
                 print(orig_data[idx][1], pred[idx])
                 continue
             for j in range(len(ratio)):
-                if pred_transform > buy_price * ratio[j]:
+                if pred_transform > cur_price * ratio[j]:
                     res[j] += (future_price - buy_price*1.005)*(100000/buy_price+1)
                     freq[j] += 1
                     print("[%s, %d] buy: %6d, sell: %6d, earn: %6d" % (str(date), freq[j], buy_price, future_price, (future_price - buy_price*1.005)*(100000/buy_price)))
@@ -246,9 +249,6 @@ class SimpleModel:
                 fout.write("%5d times trade, ratio: %1.2f, result: %10d (%6d)\n" %(freq[i], ratio[i], res[i], res[i]/freq[i]))
 
     def load_current_data(self):
-        #con = sqlite3.connect('../data/stock.db')
-        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        #code_list = list(map(lambda x: x[0], code_list))
         code_list = glob.glob('../data/hdf/*.hdf')
         code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_test = []
@@ -256,13 +256,15 @@ class SimpleModel:
         first = True
         bar = ProgressBar(len(code_list), max_width=80)
         #for code in code_list:
-        while bar.numerator < len(code_list):
-            code = code_list[bar.numerator]
+        code_list_ret = []
+        for i, code in enumerate(code_list):
+            bar.numerator = i+1
             print("%s | %d" % (bar, len(X_test)), end='\r')
             sys.stdout.flush()
-            #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
             df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
             data = df.iloc[-30:,:]
+            if pd.to_numeric(data.loc[:, '현재가']).mean() * pd.to_numeric(data.loc[:, '거래량']).mean() < 1000000000:
+                continue
             data = data.reset_index()
             for col in data.columns:
                 try:
@@ -273,23 +275,25 @@ class SimpleModel:
             data.loc[:, 'month'] = data.loc[:, '일자'].str[4:6]
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
-                code_list.remove(code)
                 continue
             DATA.append(int(data.loc[len(data)-1, '현재가']))
             try:
                 data = self.scaler[code].transform(np.array(data))
             except KeyError:
-                code_list.remove(code)
                 continue
+            code_list_ret.append(code)
             X_test.extend(np.array(data))
-            bar.numerator += 1
         X_test = np.array(X_test).reshape(-1, 23*30)
         print()
-        return X_test, code_list, DATA
+        assert len(X_test) == len(code_list_ret)
+        assert len(X_test) == len(DATA)
+        return X_test, code_list_ret, DATA
 
     def make_buy_list(self, X_test, code_list, orig_data, s_date):
-        BUY_UNIT = 20000
+        BUY_UNIT = 1000000
         print("make buy_list")
+        assert len(X_test) == len(code_list)
+        assert len(X_test) == len(orig_data)
         self.estimator = TensorflowRegressor(s_date)
         pred = self.estimator.predict(X_test)
         res = 0
@@ -403,11 +407,11 @@ class SimpleModel:
                         f_sell.write("%s;"%str(item))
                     f_sell.write('\n')
     def save_scaler(self, s_date):
-        model_name = "../model/tensorflow/regression/small/%s/scaler.pkl" % s_date
+        model_name = "../model/tensorflow/regression/big/%s/scaler.pkl" % s_date
         joblib.dump(self.scaler, model_name)
 
     def load_scaler(self, s_date):
-        model_name = "../model/tensorflow/regression/small/%s/scaler.pkl" % s_date
+        model_name = "../model/tensorflow/regression/big/%s/scaler.pkl" % s_date
         self.scaler = joblib.load(model_name)
 
 
