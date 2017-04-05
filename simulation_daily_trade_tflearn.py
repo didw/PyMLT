@@ -9,43 +9,38 @@ os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 import datetime
 import tflearn
+import glob
 
 
 class Simulation:
     def __init__(self):
         self.len_past = 30
-        self.s_date = "20120101_20160330"
-        self.model_dir = '../model/tflearn/regression/%s/' % self.s_date
+        #self.s_date = "20120101_20160330"
+        #self.model_dir = '../model/tflearn/reg_l3_bn/big/%s/' % self.s_date
 
         tf.reset_default_graph()
-        tflearn.init_graph(gpu_memory_fraction=0.1)
+        tflearn.init_graph(gpu_memory_fraction=0.05)
         input_layer = tflearn.input_data(shape=[None, 690], name='input')
-        dense1 = tflearn.fully_connected(input_layer, 128, name='dense1', activation='relu')
-        dense2 = tflearn.fully_connected(dense1, 1, name='dense2')
-        output = tflearn.single_unit(dense2)
+        dense1 = tflearn.fully_connected(input_layer, 400, name='dense1', activation='relu')
+        dense1n = tflearn.batch_normalization(dense1, name='BN1')
+        dense2 = tflearn.fully_connected(dense1n, 100, name='dense2', activation='relu')
+        dense2n = tflearn.batch_normalization(dense2, name='BN2')
+        dense3 = tflearn.fully_connected(dense2n, 1, name='dense3')
+        output = tflearn.single_unit(dense3)
         regression = tflearn.regression(output, optimizer='adam', loss='mean_square',
                                 metric='R2', learning_rate=0.001)
         self.estimators = tflearn.DNN(regression)
 
     def load_scaler(self):
-        model_name = "../model/scaler_%s.pkl" % self.s_date
+        model_name = "../model/tflearn/reg_l3_bn/big/%s/scaler.pkl" % self.s_date
         self.scaler = joblib.load(model_name)
 
     def make_x(self, data, code):
         data_x = []
         days = []
-        for col in data.columns:
-            try:
-                data.loc[:, col] = data.loc[:, col].str.replace('--', '-')
-                data.loc[:, col] = data.loc[:, col].str.replace('+', '')
-            except AttributeError as e:
-                pass
         days = data.index[:]
-        try:
-            data.loc[:, 'month'] = data.index[:].str[4:6]
-        except AttributeError as e:
-            pass
-        data = data.drop(['체결강도'], axis=1)
+        data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
+        data = data.drop(['일자', '체결강도'], axis=1)
 
         # normalization
         data = np.array(data)
@@ -64,63 +59,63 @@ class Simulation:
         return np_x, days[self.len_past:]
 
     def load_data(self, code, begin_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
-        data = df.loc[df.index > str(begin_date)]
-        data = data.loc[data.index < str(end_date)]
+        df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
+        data = df.loc[df.index > int(begin_date)]
+        data = data.loc[data.index < int(end_date)]
+        data = data.reset_index()
         data_x, days = self.make_x(data, code)
         assert len(data_x) == len(days)
         return data_x, days
 
     def load_model(self):
-        estimators.load('%s/model.tfl' % self.model_dir)
+        self.estimators.load('%s/model.tfl' % self.model_dir)
 
     def predict(self, X_data):
-        return estimators.predict(X_data)
+        return self.estimators.predict(X_data)
 
     def simulation_daily_trade(self, code, start_date, end_date):
-        X_data, days = self.load_data(code[0], start_date, end_date)
+        X_data, days = self.load_data(code, start_date, end_date)
         if len(X_data) == 0: return 0
-        MONEY = 100000
+        MONEY = 1000000
         qty = 0
         account_balance = 0
         day_last = 0
         pred_list = self.predict(X_data)
         for idx in range(len(X_data)-1):
-            pred = pred_list[idx][0]
+            pred = pred_list[idx]
             cur_price = X_data[idx][29*23]
             cur_volume = X_data[idx][29*23+1]
             buying_price = X_data[idx+1][29*23+3]
             #print("buying_price: %f" % buying_price)
-            pred_transform = self.scaler[code[0]].inverse_transform([pred] + [0]*22)[0]
-            cur_real_price = self.scaler[code[0]].inverse_transform([cur_price] + [0]*22)[0]
-            cur_real_volume = self.scaler[code[0]].inverse_transform([0] + [cur_volume] + [0]*21)[0]
+            pred_transform = self.scaler[code].inverse_transform([pred] + [0]*22)[0]
+            cur_real_price = self.scaler[code].inverse_transform([cur_price] + [0]*22)[0]
+            cur_real_volume = self.scaler[code].inverse_transform([0] + [cur_volume] + [0]*21)[1]
             #print([0]*3 + [buying_price] + [0]*19)
-            buying_real_price = self.scaler[code[0]].inverse_transform([0]*3 + [buying_price] + [0]*19)[3]
+            buying_real_price = self.scaler[code].inverse_transform([0]*3 + [buying_price] + [0]*19)[3]
             #print(pred, cur_price)
             day_last += 1
-            if pred_transform > 2*cur_real_price and qty == 0 and cur_real_price*cur_real_volume > 1000000000:
+            if pred_transform > 1.1*cur_real_price and qty == 0 and cur_real_price*cur_real_volume > 1000000000:
                 day_last = 0
                 qty += (MONEY / buying_real_price + 1)
                 account_balance -= buying_real_price * (MONEY / buying_real_price + 1)
                 #print("pred: %.2f, %d, cur: %.2f, %d" % (pred, pred_transform, cur_price, cur_real_price))
-                print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, buying_real_price, qty))
+                #print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, buying_real_price, qty))
             elif day_last >= 5 and qty > 0 and False:
                 account_balance += 0.995 * buying_real_price * qty
                 qty = 0
-                print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
+                #print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
             elif pred < cur_price and qty > 0:
                 account_balance += 0.995 * buying_real_price * qty
                 qty = 0
-                print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
+                #print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
         if qty > 0:
             account_balance += 0.995 * buying_real_price * qty
             print("[L SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
         return account_balance
 
     def simulation_monthly_daily_trade(self, start_date, end_date):
-        con = sqlite3.connect('../data/stock.db')
-        code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        code_list = glob.glob('../data/hdf/*.hdf')
+        code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         account_balance = 0
         idx = 0
         trade = 0
@@ -137,11 +132,12 @@ class Simulation:
         begin_month = 201501
         res = 0
         while begin_month <= 201701:
-            self.model_dir = '../model/tflearn/regression/%d01_%d01/' % (begin_month-500, begin_month)
+            self.s_date = '%d01_%d01'%(begin_month-500, begin_month)
+            self.model_dir = '../model/tflearn/reg_l3_bn/big/%s/' % (self.s_date)
             print(self.model_dir)
             self.load_model()
-            begin_date = datetime.date(begin_month/100, begin_month%100, 1) - datetime.timedelta(days=40)
-            end_date = datetime.date(begin_month/100, begin_month%100, 1) + datetime.timedelta(days=40)
+            begin_date = datetime.date(int(begin_month/100), begin_month%100, 1) - datetime.timedelta(days=40)
+            end_date = datetime.date(int(begin_month/100), begin_month%100, 1) + datetime.timedelta(days=40)
             res += self.simulation_monthly_daily_trade(begin_date, end_date)
             print("[%d]total res: %d" % (begin_month, res))
             begin_month += 1

@@ -116,8 +116,6 @@ class SimpleModel:
         return np.array(X_data), np.array(Y_data), np.array(DATA)
 
     def load_data(self, code, begin_date, end_date):
-        #con = sqlite3.connect('../data/stock.db')
-        #df = pd.read_sql("SELECT * from '%s'" % code, con, index_col='일자').sort_index()
         df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
         data = df.loc[df.index > begin_date]
         data = data.loc[data.index < end_date]
