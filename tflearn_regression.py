@@ -231,13 +231,13 @@ class SimpleModel:
             data = data.drop(['일자', '체결강도'], axis=1)
             if len(data) < 30:
                 continue
-            DATA.append(int(data.loc[len(data)-1, '현재가']))
             try:
-                data = self.scaler[code].transform(np.array(data))
+                data_t = self.scaler[code].transform(np.array(data))
             except KeyError:
                 continue
+            DATA.append(int(data.loc[len(data)-1, '현재가']))
             code_list_ret.append(code)
-            X_test.extend(np.array(data))
+            X_test.extend(np.array(data_t))
         X_test = np.array(X_test).reshape(-1, 23*30)
         print()
         assert len(X_test) == len(code_list_ret)
@@ -369,16 +369,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170401)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170401")
-    sm.save_scaler("20120101_20170401")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170415)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170415")
+    sm.save_scaler("20120101_20170415")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    #sm.load_scaler("20120101_20170326")
-    #X_data, code_list, data = sm.load_current_data()
-    #sm.make_buy_list(X_data, code_list, data, "20120101_20170326")
-    #X_data, data = sm.load_data_in_account()
-    #sm.make_sell_list(X_data, data, "20120101_20170326")
+    sm.load_scaler("20120101_20170415")
+    X_data, code_list, data = sm.load_current_data()
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170415")
+    X_data, data = sm.load_data_in_account()
+    sm.make_sell_list(X_data, data, "20120101_20170415")
 
