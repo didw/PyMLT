@@ -30,6 +30,9 @@ class Simulation:
         regression = tflearn.regression(output, optimizer='adam', loss='mean_square',
                                 metric='R2', learning_rate=0.001)
         self.estimators = tflearn.DNN(regression)
+        self.qty = {}
+        self.day_last = {}
+        self.currency = 100000000
 
     def load_scaler(self):
         model_name = "../model/tflearn/reg_l3_bn/big/%s/scaler.pkl" % self.s_date
@@ -75,12 +78,14 @@ class Simulation:
 
     def simulation_daily_trade(self, code, start_date, end_date):
         X_data, days = self.load_data(code, start_date, end_date)
-        if len(X_data) == 0: return 0
-        MONEY = 1000000
-        qty = 0
+        if len(X_data) == 0: return 0, 0, 0
+        if code not in self.qty:
+            self.qty[code] = 0
+            self.day_last[code] = 0
         account_balance = 0
-        day_last = 0
+        stock_balance = 0
         pred_list = self.predict(X_data)
+        total_day_last = 0
         for idx in range(len(X_data)-1):
             pred = pred_list[idx]
             cur_price = X_data[idx][29*23]
@@ -93,25 +98,32 @@ class Simulation:
             #print([0]*3 + [buying_price] + [0]*19)
             buying_real_price = self.scaler[code].inverse_transform([0]*3 + [buying_price] + [0]*19)[3]
             #print(pred, cur_price)
-            day_last += 1
-            if pred_transform > 1.1*cur_real_price and qty == 0 and cur_real_price*cur_real_volume > 1000000000:
-                day_last = 0
-                qty += (MONEY / buying_real_price + 1)
-                account_balance -= buying_real_price * (MONEY / buying_real_price + 1)
+            self.day_last[code] += 1
+            if pred_transform > 1.1*cur_real_price and self.qty[code] == 0 and cur_real_price*cur_real_volume > 1000000000:
+                self.day_last[code] = 0
+                unit_buy = self.currency * 0.02
+                self.qty[code] = (unit_buy / buying_real_price + 1)
+                account_balance -= buying_real_price * self.qty[code]
+                self.currency -= buying_real_price * self.qty[code]
                 #print("pred: %.2f, %d, cur: %.2f, %d" % (pred, pred_transform, cur_price, cur_real_price))
                 #print("[BUY] balance: %d, price: %d qty: %d" % (account_balance, buying_real_price, qty))
-            elif day_last >= 5 and qty > 0 and False:
-                account_balance += 0.995 * buying_real_price * qty
-                qty = 0
+            elif self.day_last[code] >= 5 and self.qty[code] > 0 and False:
+                account_balance += 0.995 * buying_real_price * self.qty[code]
+                self.currency += 0.995 * buying_real_price * self.qty[code]
+                self.qty[code] = 0
                 #print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
-            elif pred < cur_price and qty > 0:
-                account_balance += 0.995 * buying_real_price * qty
-                qty = 0
-                #print("[SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
-        if qty > 0:
-            account_balance += 0.995 * buying_real_price * qty
-            print("[L SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
-        return account_balance
+            elif pred < cur_price and self.qty[code] > 0:
+                account_balance += 0.995 * buying_real_price * self.qty[code]
+                self.currency += 0.995 * buying_real_price * self.qty[code]
+                self.qty[code] = 0
+                #print("[SELL] balance: %d, price: %d, qty: %d, day_last: %d" % (account_balance, buying_real_price, qty, day_last))
+                total_day_last += self.day_last[code]
+        if self.qty[code] > 0:
+            stock_balance = 0.995 * buying_real_price * self.qty[code]
+        else:
+            stock_balance = 0
+            #print("[L SELL] balance: %d, price: %d, qty: %d" % (account_balance, buying_real_price, qty))
+        return account_balance, total_day_last, stock_balance
 
     def simulation_monthly_daily_trade(self, start_date, end_date):
         code_list = glob.glob('../data/hdf/*.hdf')
@@ -119,17 +131,21 @@ class Simulation:
         account_balance = 0
         idx = 0
         trade = 0
+        day_last = 0
+        stock_balance = 0
         for code in code_list:
-            res = self.simulation_daily_trade(code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
+            res, dl, sb = self.simulation_daily_trade(code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
             idx += 1
+            day_last += dl
+            stock_balance += sb
             if res != 0:
                 trade += 1
                 account_balance += res
-                print("[%d/%d] balance: %d" % (trade, idx, account_balance))
+                print("[%d/%d] balance: %d (adl: %.1f, sb: %d)" % (trade, idx, account_balance, day_last/trade, stock_balance))
         return account_balance
 
     def simulation_all(self):
-        begin_month = 201501
+        begin_month = 201511
         res = 0
         while begin_month <= 201701:
             self.s_date = '%d01_%d01'%(begin_month-500, begin_month)

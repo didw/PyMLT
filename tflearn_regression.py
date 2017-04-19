@@ -15,6 +15,7 @@ import glob
 
 class TensorflowRegressor():
     def __init__(self, s_date):
+        self.n_epoch = 30
         prev_bd = int(s_date[:6])-1
         prev_ed = int(s_date[9:15])-1
         if prev_bd%100 == 0: prev_bd -= 98
@@ -37,6 +38,7 @@ class TensorflowRegressor():
         self.estimators = tflearn.DNN(regression)
         if os.path.exists('%s/model.tfl' % prev_model):
             self.estimators.load('%s/model.tfl' % prev_model)
+            self.n_epoch = 10
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
 
@@ -44,7 +46,7 @@ class TensorflowRegressor():
         # Add an op to initialize the variables.
         if os.path.exists('%s/model.tfl' % self.model_dir):
             self.estimators.load('%s/model.tfl' % self.model_dir)
-        self.estimators.fit(X_data, Y_data, n_epoch=10, show_metric=True, snapshot_epoch=False)
+        self.estimators.fit(X_data, Y_data, n_epoch=self.n_epoch, show_metric=True, snapshot_epoch=False)
         self.estimators.save('%s/model.tfl' % self.model_dir)
 
     def predict(self, X_data):
@@ -60,8 +62,6 @@ class SimpleModel:
         self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):
-        #con = sqlite3.connect('../data/stock.db')
-        #code_list = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         code_list = glob.glob('../data/hdf/*.hdf')
         code_list = list(map(lambda x: x.split('.hdf')[0][-6:], code_list))
         X_data_list, Y_data_list, DATA_list = [0]*10, [0]*10, [0]*10
@@ -77,7 +77,6 @@ class SimpleModel:
             X, Y = self.make_x_y(data, code)
             if len(X) <= 10: continue
             mean_velocity = int(data.loc[len_data-10:len_data,'현재가'].mean()) * int(data.loc[len_data-10:len_data, '거래량'].mean())
-            #print("mean velocity: %d" % mean_velocity)
             if mean_velocity < 1000000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
@@ -259,6 +258,7 @@ class SimpleModel:
         # load code list from account
         set_account = set([])
         with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+            deposit = int(f_stocks.readline())
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(str(data[6].replace('A', '')))
@@ -266,6 +266,7 @@ class SimpleModel:
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt", encoding='utf-8') as f_buy:
             for idx in range(len(pred)):
+                BUY_UNIT = deposit / 20
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
@@ -283,6 +284,7 @@ class SimpleModel:
                     print("add to buy_list %s" % code_list[idx])
                     buy_item[1] = code_list[idx]
                     buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
+                    deposit -= buy_item[3] * BUY_UNIT
                     for item in buy_item:
                         f_buy.write("%s;"%str(item))
                     f_buy.write('\n')
@@ -291,6 +293,7 @@ class SimpleModel:
         # load code list from account
         DATA = []
         with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
+            deposit = f_stocks.readline()
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
