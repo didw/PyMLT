@@ -366,9 +366,9 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    X_train, Y_train, _ = sm.load_all_data(20120101, 20170415)
-    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170415")
-    sm.save_scaler("20120101_20170415")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170415)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170415")
+    #sm.save_scaler("20120101_20170415")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
