@@ -15,7 +15,7 @@ import glob
 
 class TensorflowRegressor():
     def __init__(self, s_date):
-        self.n_epoch = 30
+        self.n_epoch = 20
         prev_bd = int(s_date[:6])-1
         prev_ed = int(s_date[9:15])-1
         if prev_bd%100 == 0: prev_bd -= 98
@@ -57,8 +57,8 @@ class TensorflowRegressor():
 class SimpleModel:
     def __init__(self):
         self.data = dict()
-        self.frame_len = 30
-        self.predict_dist = 5
+        self.frame_len = 60
+        self.predict_dist = 30
         self.scaler = dict()
 
     def load_all_data(self, begin_date, end_date):
@@ -80,15 +80,16 @@ class SimpleModel:
             if mean_velocity < 1000000000: # 10억 이하면 pass
                 continue
             code_array = [code] * len(X)
-            assert len(X) == len(data.loc[29:len(data)-self.predict_dist-1, '일자'])
+            if len(X) != len(data.loc[self.frame_len-1:len(data)-self.predict_dist-1, '일자']):
+                print("lenX:%d, lenData:%d"%(len(X), len(data.loc[self.frame_len-1:len(data)-self.predict_dist-1, '일자'])))
             if idx%split == 0:
                 X_data_list[int(idx/split)] = list(X)
                 Y_data_list[int(idx/split)] = list(Y)
-                DATA_list[int(idx/split)] = np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist()
+                DATA_list[int(idx/split)] = np.array([data.loc[self.frame_len-1:len(data)-(self.predict_dist+1), '일자'].values.tolist(), code_array, data.loc[self.frame_len-1:len(data)-(self.predict_dist+1), '현재가'], data.loc[self.frame_len+self.predict_dist-1:len(data), '현재가'], data.loc[self.frame_len:len(data)-self.predict_dist, '시가']]).T.tolist()
             else:
                 X_data_list[int(idx/split)].extend(X)
                 Y_data_list[int(idx/split)].extend(Y)
-                DATA_list[int(idx/split)].extend(np.array([data.loc[29:len(data)-6, '일자'].values.tolist(), code_array, data.loc[29:len(data)-6, '현재가'], data.loc[34:len(data), '현재가'], data.loc[30:len(data)-5, '시가']]).T.tolist())
+                DATA_list[int(idx/split)].extend(np.array([data.loc[self.frame_len-1:len(data)-(self.predict_dist+1), '일자'].values.tolist(), code_array, data.loc[self.frame_len-1:len(data)-(self.predict_dist+1), '현재가'], data.loc[self.frame_len+self.predict_dist-1:len(data), '현재가'], data.loc[self.frame_len:len(data)-self.predict_dist, '시가']]).T.tolist())
             bar.numerator += 1
             print("%s | %d" % (bar, len(X_data_list[int(idx/split)])), end='\r')
             sys.stdout.flush()
@@ -143,7 +144,7 @@ class SimpleModel:
         for i in range(self.frame_len, len(data)-self.predict_dist+1):
             data_x.extend(np.array(data[i-self.frame_len:i, :]))
             data_y.append(data[i+self.predict_dist-1][0])
-        np_x = np.array(data_x).reshape(-1, 23*30)
+        np_x = np.array(data_x).reshape(-1, 23*self.frame_len)
         np_y = np.array(data_y)
         return np_x, np_y
 
@@ -217,7 +218,7 @@ class SimpleModel:
             print("%s | %d" % (bar, len(X_test)), end='\r')
             sys.stdout.flush()
             df = pd.read_hdf('../data/hdf/%s.hdf'%code, 'day').sort_index()
-            data = df.iloc[-30:,:]
+            data = df.iloc[-self.frame_len:,:]
             if pd.to_numeric(data.loc[:, '현재가']).mean() * pd.to_numeric(data.loc[:, '거래량']).mean() < 1000000000:
                 continue
             data = data.reset_index()
@@ -229,16 +230,16 @@ class SimpleModel:
                     pass
             data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
             data = data.drop(['일자', '체결강도'], axis=1)
-            if len(data) < 30:
+            if len(data) < self.frame_len:
                 continue
             try:
                 data_t = self.scaler[code].transform(np.array(data))
-            except KeyError:
+            except (KeyError, ValueError):
                 continue
             DATA.append(int(data.loc[len(data)-1, '현재가']))
             code_list_ret.append(code)
             X_test.extend(np.array(data_t))
-        X_test = np.array(X_test).reshape(-1, 23*30)
+        X_test = np.array(X_test).reshape(-1, 23*self.frame_len)
         print()
         assert len(X_test) == len(code_list_ret)
         assert len(X_test) == len(DATA)
@@ -258,7 +259,7 @@ class SimpleModel:
         # load code list from account
         set_account = set([])
         with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
-            deposit = int(f_stocks.readline())
+            deposit = int(f_stocks.readline().strip().replace(',',''))
             for line in f_stocks.readlines():
                 data = line.split(',')
                 set_account.add(str(data[6].replace('A', '')))
@@ -266,7 +267,12 @@ class SimpleModel:
         buy_item = ["매수", "", "시장가", 0, 0, "매수전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/buy_list.txt", "wt", encoding='utf-8') as f_buy:
             for idx in range(len(pred)):
-                BUY_UNIT = deposit / 20
+                BUY_PRICE = deposit / 10
+                if deposit < 0:
+                    print("not enough deposit")
+                    break
+                print("deposit: %d" % deposit)
+                print("BUY_PRICE: %d" % BUY_PRICE)
                 real_buy_price = int(orig_data[idx])
                 buy_price = float(X_test[idx][23*29])
                 buy_price_transform = self.scaler[code_list[idx]].inverse_transform([buy_price] + [0]*22)[0]
@@ -281,10 +287,10 @@ class SimpleModel:
                 print("buy_price: %d, real_buy_price: %d" % (buy_price_transform, real_buy_price))
                 print("[BUY PREDICT] code: %s, cur: %5d, predict: %5d" % (code_list[idx], real_buy_price, pred_transform))
                 if pred_transform > real_buy_price * 1.1 and code_list[idx] not in set_account:
-                    print("add to buy_list %s" % code_list[idx])
+                    print("add to buy_list %s(%d)" % (code_list[idx], real_buy_price))
                     buy_item[1] = code_list[idx]
-                    buy_item[3] = int(BUY_UNIT / real_buy_price) + 1
-                    deposit -= buy_item[3] * BUY_UNIT
+                    buy_item[3] = int(BUY_PRICE / real_buy_price) + 1
+                    deposit -= (buy_item[3] * real_buy_price)
                     for item in buy_item:
                         f_buy.write("%s;"%str(item))
                     f_buy.write('\n')
@@ -293,7 +299,7 @@ class SimpleModel:
         # load code list from account
         DATA = []
         with open('../data/stocks_in_account.txt', encoding='utf-8') as f_stocks:
-            deposit = f_stocks.readline()
+            deposit = int(f_stocks.readline().strip().replace(',',''))
             for line in f_stocks.readlines():
                 data = line.split(',')
                 DATA.append([data[6].replace('A', ''), data[1], data[0]])
@@ -316,12 +322,12 @@ class SimpleModel:
                 print(e)
                 idx_rm.append(idx)
                 continue
-            data = df.iloc[-30:,:]
+            data = df.iloc[-self.frame_len:,:]
             data = data.reset_index()
             data.loc[:, 'month'] = data.loc[:, '일자']%10000/100
             DATA[idx].append(int(data.loc[len(data)-1, '현재가']))
             data = data.drop(['일자', '체결강도'], axis=1)
-            if len(data) < 30:
+            if len(data) < self.frame_len:
                 idx_rm.append(idx)
                 continue
             try:
@@ -332,7 +338,7 @@ class SimpleModel:
             X_test.extend(np.array(data))
         for i in idx_rm[-1:0:-1]:
             del DATA[i]
-        X_test = np.array(X_test).reshape(-1, 23*30)
+        X_test = np.array(X_test).reshape(-1, 23*self.frame_len)
         print()
         return X_test, DATA
 
@@ -347,7 +353,7 @@ class SimpleModel:
         sell_item = ["매도", "", "시장가", 0, 0, "매도전"]  # 매수/매도, code, 시장가/현재가, qty, price, "주문전/주문완료"
         with open("../data/sell_list.txt", "wt", encoding='utf-8') as f_sell:
             for idx in range(len(pred)):
-                current_price = float(X_test[idx][23*29])
+                current_price = float(X_test[idx][23*(self.frame_len-1)])
                 current_real_price = int(DATA[idx][3])
                 name = DATA[idx][2]
                 print("[SELL PREDICT] name: %s, code: %s, cur: %f(%d), predict: %f" % (name, DATA[idx][0], current_price, current_real_price, pred[idx]))
@@ -369,16 +375,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170415)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170415")
-    #sm.save_scaler("20120101_20170415")
+    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170611)
+    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170611")
+    #sm.save_scaler("20120101_20170611")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170415")
+    sm.load_scaler("20120101_20170611")
     X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170415")
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170611")
     X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170415")
+    sm.make_sell_list(X_data, data, "20120101_20170611")
 
