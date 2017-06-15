@@ -14,7 +14,7 @@ import glob
 
 
 class TensorflowRegressor():
-    def __init__(self, s_date):
+    def __init__(self, s_date, n_frame):
         self.n_epoch = 20
         prev_bd = int(s_date[:6])-1
         prev_ed = int(s_date[9:15])-1
@@ -26,7 +26,7 @@ class TensorflowRegressor():
 
         tf.reset_default_graph()
         tflearn.init_graph(gpu_memory_fraction=0.1)
-        input_layer = tflearn.input_data(shape=[None, 690], name='input')
+        input_layer = tflearn.input_data(shape=[None, 23*n_frame], name='input')
         dense1 = tflearn.fully_connected(input_layer, 400, name='dense1', activation='relu')
         dense1n = tflearn.batch_normalization(dense1, name='BN1')
         dense2 = tflearn.fully_connected(dense1n, 100, name='dense2', activation='relu')
@@ -154,13 +154,13 @@ class SimpleModel:
         #p = np.random.permutation(len(X_train))
         #X_train = X_train[p]
         #Y_train = Y_train[p]
-        self.estimator = TensorflowRegressor(s_date)
+        self.estimator = TensorflowRegressor(s_date, self.frame_len)
         self.estimator.fit(X_train, Y_train)
         print("finish training model")
 
     def evaluate_model(self, X_test, Y_test, orig_data, s_date, fname=None):
         print("Evaluate model test.ckpt")
-        self.estimator = TensorflowRegressor(s_date)
+        self.estimator = TensorflowRegressor(s_date, self.frame_len)
         pred = self.estimator.predict(X_test)
         score = 0
         ratio = [1, 1.01, 1.02, 1.05, 1.1, 1.5, 2, 2.5, 3]
@@ -250,7 +250,7 @@ class SimpleModel:
         print("make buy_list")
         assert len(X_test) == len(code_list)
         assert len(X_test) == len(orig_data)
-        self.estimator = TensorflowRegressor(s_date)
+        self.estimator = TensorflowRegressor(s_date, self.frame_len)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
@@ -344,7 +344,7 @@ class SimpleModel:
 
     def make_sell_list(self, X_test, DATA, s_date):
         print("make sell_list")
-        self.estimator = TensorflowRegressor(s_date)
+        self.estimator = TensorflowRegressor(s_date, self.frame_len)
         pred = self.estimator.predict(X_test)
         res = 0
         score = 0
@@ -375,16 +375,16 @@ class SimpleModel:
 
 if __name__ == '__main__':
     sm = SimpleModel()
-    #X_train, Y_train, _ = sm.load_all_data(20120101, 20170611)
-    #sm.train_model_tensorflow(X_train, Y_train, "20120101_20170611")
-    #sm.save_scaler("20120101_20170611")
+    X_train, Y_train, _ = sm.load_all_data(20120101, 20170614)
+    sm.train_model_tensorflow(X_train, Y_train, "20120101_20170614")
+    sm.save_scaler("20120101_20170614")
     #sm.load_scaler("20120101_20170326")
     #X_test, Y_test, Data = sm.load_all_data(20160620, 20160910)
     #sm.evaluate_model(X_test, Y_test, Data, "20120101_20160730")
 
-    sm.load_scaler("20120101_20170611")
+    sm.load_scaler("20120101_20170614")
     X_data, code_list, data = sm.load_current_data()
-    sm.make_buy_list(X_data, code_list, data, "20120101_20170611")
+    sm.make_buy_list(X_data, code_list, data, "20120101_20170614")
     X_data, data = sm.load_data_in_account()
-    sm.make_sell_list(X_data, data, "20120101_20170611")
+    sm.make_sell_list(X_data, data, "20120101_20170614")
 
